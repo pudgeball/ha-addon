@@ -55,6 +55,31 @@ class DeviceBroadcasterTest < Minitest::Test
     device&.destroy
   end
 
+  def test_broadcast_all_mira_devices_skips_the_device_query_when_there_are_none
+    queries = 0
+    counter = ->(*, payload) { queries += 1 if payload[:sql].include?(%("devices")) }
+    ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+      DeviceBroadcaster.broadcast_all_mira_devices
+      DeviceBroadcaster.broadcast_all_mira_devices
+      DeviceBroadcaster.broadcast_all_mira_devices
+    end
+
+    assert_equal 1, queries, "only the first tick should ask whether any Mira devices exist"
+  end
+
+  def test_broadcast_all_mira_devices_picks_up_a_new_mira_after_clear_hash
+    DeviceBroadcaster.broadcast_all_mira_devices
+    device = Device.create!(location: test_location, name: "test_broadcast_new_mira", model: "boox_mira_pro")
+    device.update_column(:demo_mode_enabled, true)
+    DeviceBroadcaster.clear_hash(:all)
+
+    broadcasts = track_broadcasts { DeviceBroadcaster.broadcast_all_mira_devices }
+
+    assert_equal [device], broadcasts.map { |b| b[:device] }
+  ensure
+    device&.destroy
+  end
+
   def test_broadcast_all_mira_devices_includes_boox_mira
     device = Device.create!(location: test_location, name: "test_broadcast_boox_mira", model: "boox_mira")
     device.update_column(:demo_mode_enabled, true)

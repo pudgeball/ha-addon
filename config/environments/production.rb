@@ -32,9 +32,11 @@ Rails.application.configure do
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   # config.force_ssl = true
 
-  # Use the lowest log level to ensure availability of diagnostic information
-  # when problems arise.
-  config.log_level = :debug
+  # Info by default: requests, jobs and the [Screenshot]/[Scheduler] timing
+  # lines, without a line per SQL query (at debug the every-few-seconds
+  # background queries crowd everything else out of the add-on's Log tab).
+  # Set RAILS_LOG_LEVEL=debug to see the queries again.
+  config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info").to_sym
 
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]

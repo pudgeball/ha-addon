@@ -28,7 +28,13 @@ class DeviceBroadcaster
       end
     end
 
+    # How long a "no realtime (Mira) devices" answer is trusted before asking
+    # the database again, so installs without any skip the per-tick query.
+    REALTIME_CHECK_SECONDS = 60
+
     def broadcast_all_mira_devices
+      return unless realtime_devices_present?
+
       Device.where(model: Device::REALTIME_MODELS).find_each do |device|
         broadcast_if_changed(device)
       rescue => e
@@ -36,9 +42,26 @@ class DeviceBroadcaster
       end
     end
 
+    def realtime_devices_present?
+      now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      @mutex.synchronize do
+        return true if @realtime_present
+        return false if @realtime_checked_at && now - @realtime_checked_at < REALTIME_CHECK_SECONDS
+      end
+
+      present = Device.where(model: Device::REALTIME_MODELS).exists?
+      @mutex.synchronize do
+        @realtime_present = present
+        @realtime_checked_at = now
+      end
+      present
+    end
+
     def clear_hash(device_id)
       @mutex.synchronize do
         if device_id == :all
+          @realtime_present = nil
+          @realtime_checked_at = nil
           @last_hashes.clear
         else
           @last_hashes.delete(device_id)
