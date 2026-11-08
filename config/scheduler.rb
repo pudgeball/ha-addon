@@ -30,8 +30,10 @@ scheduler.every "1m" do
   DeviceBroadcaster.broadcast_all_mira_devices
 end
 
-# The Year template's calendars cover the next 12 months and change slowly.
-scheduler.every "1h" do
+# The Year template's calendars cover the next 12 months, so they're fetched
+# less often than the short-range ones, but often enough that a newly added
+# trip shows up within a refresh or two.
+scheduler.every "15m" do
   HomeAssistantApi.new.fetch_year_calendars
 end
 
