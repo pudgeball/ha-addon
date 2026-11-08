@@ -23,6 +23,9 @@ scheduler.in "5s" do
   timers["startup fetch_weather"].run { api.fetch_weather }
   timers["startup calendar_import"].run { HomeAssistantCalendarImport.new(account: Account.first).call if Account.first }
   timers["startup broadcast_mira"].run { DeviceBroadcaster.broadcast_all_mira_devices }
+  # Load the icon data now (a few MB of JSON) so the first icon suggestion on
+  # the Events page doesn't pay for it.
+  timers["startup warm_icon_matcher"].run { MdiIconMatcher.instance }
 end
 
 scheduler.every "5m" do
