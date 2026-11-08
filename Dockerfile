@@ -29,6 +29,7 @@ RUN SECRET_KEY_BASE=precompile \
     bundle exec rails assets:precompile
 
 ENV PORT=8098
+ENV PG_PORT=5433
 
 EXPOSE 8098
 
