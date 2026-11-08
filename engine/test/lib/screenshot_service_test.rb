@@ -3,8 +3,86 @@
 require "test_helper"
 
 class ScreenshotServiceTest < Minitest::Test
+  def setup
+    @keep_browser_for = ScreenshotService.keep_browser_for
+  end
+
   def teardown
     ScreenshotService.instance_variable_set(:@browser, nil)
+    ScreenshotService.keep_browser_for = @keep_browser_for
+  end
+
+  FakePage = Struct.new(:visited) do
+    def command(*, **) = nil
+    def go_to(url) = (self.visited = url)
+    def screenshot(**) = "cG5n"
+    def close = nil
+  end
+
+  FakeBrowser = Struct.new(:pages, :quit_count) do
+    def create_page = FakePage.new.tap { |page| pages << page }
+    def quit = (self.quit_count += 1)
+  end
+
+  def fake_browser
+    FakeBrowser.new([], 0)
+  end
+
+  def test_capture_quits_the_browser_straight_away_by_default
+    ScreenshotService.keep_browser_for = 0
+    browser = fake_browser
+    ScreenshotService.instance_variable_set(:@browser, browser)
+
+    ScreenshotService.capture("http://example.test/d/1?key=secret", raw: true)
+
+    assert_equal 1, browser.quit_count
+    assert_nil ScreenshotService.instance_variable_get(:@browser)
+  end
+
+  def test_capture_keeps_the_browser_for_the_next_capture_then_quits_when_idle
+    ScreenshotService.keep_browser_for = 0.3
+    browser = fake_browser
+    ScreenshotService.instance_variable_set(:@browser, browser)
+
+    ScreenshotService.capture("http://example.test/d/1", raw: true)
+    sleep 0.15
+    ScreenshotService.capture("http://example.test/d/1?page=1", raw: true)
+    sleep 0.2
+
+    assert_equal 2, browser.pages.size, "both captures should use the same browser"
+    assert_equal 0, browser.quit_count, "the second capture should cancel the first one's idle quit"
+
+    sleep 0.3
+    assert_equal 1, browser.quit_count
+    assert_nil ScreenshotService.instance_variable_get(:@browser)
+  end
+
+  def test_failed_capture_quits_the_browser_even_when_keeping_it
+    ScreenshotService.keep_browser_for = 60
+    reset_called = false
+
+    ScreenshotService.stub(:capture_screenshot_with_retry, ->(*, **) { raise "boom" }) do
+      ScreenshotService.stub(:reset!, -> { reset_called = true }) do
+        assert_raises(RuntimeError) { ScreenshotService.capture("http://example.test", raw: true) }
+      end
+    end
+
+    assert reset_called
+  end
+
+  def test_capture_logs_where_the_time_went_without_the_display_key
+    ScreenshotService.keep_browser_for = 0
+    ScreenshotService.instance_variable_set(:@browser, fake_browser)
+    log = StringIO.new
+
+    Rails.stub(:logger, ActiveSupport::Logger.new(log)) do
+      ScreenshotService.capture("http://127.0.0.1:8099/d/1?key=secret&page=1&generation=true", raw: true)
+    end
+
+    line = log.string.lines.grep(/\[ScreenshotService\]/).first
+    assert_match(/captured browser=reused launch_ms=\d+ load_ms=\d+ screenshot_ms=\d+ process_ms=\d+ quit_ms=\d+ total_ms=\d+/, line)
+    assert_includes line, "url=/d/1?key=…&page=1&generation=true"
+    refute_includes line, "secret"
   end
 
   def test_browser_does_not_preload_jemalloc

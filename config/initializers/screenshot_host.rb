@@ -8,4 +8,9 @@
 # to the IPv6 address Puma doesn't listen on.
 Rails.application.config.to_prepare do
   Device.screenshot_host = "http://127.0.0.1:#{ENV.fetch("PORT", 3000)}"
+  # Starting Chromium takes a couple of seconds, so keep it open for a while
+  # after a capture: a refresh captures the main and Year pages back to back,
+  # and Regenerate clicks tend to come in bursts. It still quits when idle so
+  # it isn't holding memory between the 15-minute refreshes.
+  ScreenshotService.keep_browser_for = ENV.fetch("SCREENSHOT_KEEP_BROWSER_SECONDS", 120).to_f
 end
