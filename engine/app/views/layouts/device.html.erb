@@ -2,12 +2,14 @@
 <html>
   <head>
     <title>Timeframe</title>
-    <%# The display page is a picture of an e-paper screen: always light. "only"
-        asks browsers that darken light pages on their own (Safari's Adaptive
-        Dark Mode, Chrome's auto dark theme) to leave it alone, e.g. in the
-        settings preview inside Home Assistant's dark theme. %>
-    <meta name="color-scheme" content="light only">
-    <style>:root { color-scheme: light only; }</style>
+    <% if @light_only %>
+      <%# The settings preview is a picture of an e-paper screen, so it stays
+          light even when the browser darkens the rest of the page: "only" asks
+          browsers that darken light pages on their own (Safari's Adaptive Dark
+          Mode, Chrome's auto dark theme) to leave this one alone. %>
+      <meta name="color-scheme" content="light only">
+      <style>:root { color-scheme: light only; }</style>
+    <% end %>
     <link rel="stylesheet" href="<%= asset_path("/css/mdi/materialdesignicons.css") %>">
     <link rel="stylesheet" href="<%= asset_path("/css/device.css") %>">
     <% if @refresh %>
