@@ -780,14 +780,17 @@ class Device < ActiveRecord::Base
     # so every device refreshes exactly once after a release. A forced refresh
     # (the Regenerate button) always recaptures, so a bad capture can't stick.
     crc = display_content_crc
+    render_ms = elapsed_milliseconds(started_at)
     if !force && crc && crc == display_state_crc && cached_image.present?
-      log_screenshot_refresh("skipped", crc: crc, duration_ms: elapsed_milliseconds(started_at))
+      log_screenshot_refresh("skipped", crc: crc, duration_ms: elapsed_milliseconds(started_at), render_ms: render_ms)
       return
     end
 
     previous_crc = display_state_crc
     stage = "capture"
+    capture_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     self.cached_image = capture_screenshot(url)
+    capture_ms = elapsed_milliseconds(capture_started_at)
     stage = "persist"
     self.cached_image_at = Time.current
     self.last_generated_at = cached_image_at
@@ -796,7 +799,8 @@ class Device < ActiveRecord::Base
 
     stage = "encode"
     encode_visionect_image! if visionect?
-    log_screenshot_refresh("regenerated", crc: crc, previous_crc: previous_crc, duration_ms: elapsed_milliseconds(started_at))
+    log_screenshot_refresh("regenerated", crc: crc, previous_crc: previous_crc, duration_ms: elapsed_milliseconds(started_at),
+      render_ms: render_ms, capture_ms: capture_ms, forced: force)
   rescue => e
     log_screenshot_refresh("failed", duration_ms: elapsed_milliseconds(started_at), stage: stage, error: e)
     raise
@@ -805,21 +809,34 @@ class Device < ActiveRecord::Base
   # Captures the Year page, skipping the capture when its rendered HTML hasn't
   # changed since the last one (same short-circuit as refresh_screenshot!).
   def refresh_year_page_screenshot!(base_url = nil, force: false)
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     base_url = screenshot_base_url(base_url)
     crc = display_content_crc(template: YEAR_TEMPLATE)
+    render_ms = elapsed_milliseconds(started_at)
     cached = year_page_cache
-    return if !force && crc && cached[:crc] == crc && cached[:image].present?
+    if !force && crc && cached[:crc] == crc && cached[:image].present?
+      log_screenshot_timing("skipped", page: "year", duration_ms: elapsed_milliseconds(started_at), render_ms: render_ms)
+      return
+    end
 
     url = token_device_url(host: base_url, generation: true, page: YEAR_PAGE)
+    capture_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     image = capture_screenshot(url, template: YEAR_TEMPLATE)
+    capture_ms = elapsed_milliseconds(capture_started_at)
     page_store.write(page_cache_key("year_image"), {image: image, at: Time.current, crc: crc})
+    log_screenshot_timing("regenerated", page: "year", duration_ms: elapsed_milliseconds(started_at),
+      render_ms: render_ms, capture_ms: capture_ms, forced: force)
+  rescue => e
+    log_screenshot_timing("failed", page: "year", duration_ms: elapsed_milliseconds(started_at), error: e)
+    raise
   end
 
   # Records the screenshot refresh decision (skipped vs regenerated) as an audit
   # log so the content-hash short-circuit is observable in the admin audit view.
   # CreateAuditLogJob/AuditLog only exist in the cloud app, so this is a no-op
   # in deployments without them.
-  def log_screenshot_refresh(result, crc: nil, previous_crc: nil, duration_ms: nil, stage: nil, error: nil)
+  def log_screenshot_refresh(result, crc: nil, previous_crc: nil, duration_ms: nil, stage: nil, error: nil, render_ms: nil, capture_ms: nil, forced: nil)
+    log_screenshot_timing(result, page: "main", duration_ms: duration_ms, render_ms: render_ms, capture_ms: capture_ms, forced: forced, stage: stage, error: error)
     return unless defined?(CreateAuditLogJob)
 
     metadata = {content_crc: crc, previous_content_crc: previous_crc, duration_ms: duration_ms, stage: stage}.compact
@@ -833,6 +850,17 @@ class Device < ActiveRecord::Base
     )
   rescue => e
     Rails.logger.warn("[Screenshot] audit log failed for #{name}: #{e.message}")
+  end
+
+  # One log line per screenshot refresh, so the app log shows what each capture
+  # cost: render_ms is rendering the page to check whether it changed,
+  # capture_ms is the headless browser screenshot (only when it did change).
+  def log_screenshot_timing(result, page:, duration_ms:, render_ms: nil, capture_ms: nil, forced: nil, stage: nil, error: nil)
+    fields = {device: id, page: page, result: result, duration_ms: duration_ms,
+              render_ms: render_ms, capture_ms: capture_ms, forced: (forced || nil), stage: stage}.compact
+    line = "[Screenshot] " + fields.map { |key, value| "#{key}=#{value}" }.join(" ")
+    line += " error=#{error.class}: #{error.message}" if error
+    error ? Rails.logger.warn(line) : Rails.logger.info(line)
   end
 
   def elapsed_milliseconds(started_at)

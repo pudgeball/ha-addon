@@ -229,6 +229,23 @@ class DeviceTest < Minitest::Test
     assert_nil device.last_connection_at
   end
 
+  def test_refresh_screenshot_logs_each_capture_and_skip_with_timings
+    device = Device.create!(location: test_location, name: "test_hash_log_#{SecureRandom.hex(3)}", model: "trmnl_og", mac_address: "CD:#{SecureRandom.hex(5).scan(/../).join(":").upcase}", api_key: SecureRandom.hex(16), friendly_id: SecureRandom.alphanumeric(6).upcase, display_key: SecureRandom.alphanumeric(24))
+    log = StringIO.new
+    Rails.stub(:logger, ActiveSupport::Logger.new(log)) do
+      device.stub(:rendered_display_html, "<html>stable</html>") do
+        device.stub(:capture_screenshot, ->(_url) { "img" }) do
+          device.refresh_screenshot!("http://example.test")
+          device.refresh_screenshot!("http://example.test")
+        end
+      end
+    end
+    lines = log.string.lines.grep(/\[Screenshot\]/)
+    assert_equal 2, lines.size, log.string
+    assert_match(/device=#{device.id} page=main result=regenerated duration_ms=\d+ render_ms=\d+ capture_ms=\d+/, lines[0])
+    assert_match(/device=#{device.id} page=main result=skipped duration_ms=\d+ render_ms=\d+\n/, lines[1])
+  end
+
   def test_screenshot_base_url_prefers_the_configured_host
     device = Device.new(name: "test_host", model: "trmnl_x")
     original = Device.screenshot_host
