@@ -43,7 +43,10 @@
     <% unless hide_support_content %>
     <div class="lg:w-1/2 lg:flex-shrink-0">
     <% has_screenshot = @device.screenshotted? && @device.cached_image.present? %>
-    <% screenshot_pages = @device.year_page_enabled? ? [0, Device::YEAR_PAGE] : [0] %>
+    <%# The Year tab is rendered whenever the device can have a Year page, and
+        hidden while the "Year view on button press" switch is off, so flipping
+        the switch can show it without a page reload. %>
+    <% screenshot_pages = @device.year_page_supported? ? [0, Device::YEAR_PAGE] : [0] %>
     <div class="mb-3 rounded-lg border border-ink/10 bg-white lg:sticky lg:top-4" data-controller="tabs" data-tabs-active-class="tf-tab-active">
       <div class="border-b border-ink/10 px-3 pt-2">
         <div class="flex gap-1" role="tablist">
@@ -51,7 +54,7 @@
           <% if has_screenshot %>
             <button type="button" class="tf-tab px-3 py-2 text-sm" data-tabs-target="tab" data-action="tabs#select" data-panel="screenshot" role="tab" aria-selected="false">Screenshot</button>
             <% if screenshot_pages.include?(Device::YEAR_PAGE) %>
-              <button type="button" class="tf-tab px-3 py-2 text-sm" data-tabs-target="tab" data-action="tabs#select" data-panel="screenshot-year" role="tab" aria-selected="false">Year</button>
+              <button type="button" class="tf-tab px-3 py-2 text-sm" data-tabs-target="tab" data-action="tabs#select" data-panel="screenshot-year" role="tab" aria-selected="false" id="screenshot-year-tab" <%= "hidden" unless @device.year_page_enabled? %>>Year</button>
             <% end %>
           <% end %>
         </div>
@@ -306,6 +309,18 @@
           var iframe = document.getElementById('preview-iframe');
           if (iframe) { iframe.src = iframe.src; }
         }
+        // Show the Year screenshot tab as soon as the Year page is switched on,
+        // and hide it (falling back to the main screenshot) when it's switched off.
+        function syncYearTab() {
+          var tab = document.getElementById('screenshot-year-tab');
+          var cb = form.querySelector('[data-option-key="year_page_on_button"]');
+          if (!tab || !cb) { return; }
+          tab.hidden = !cb.checked;
+          if (!cb.checked && tab.getAttribute('aria-selected') === 'true') {
+            var main = document.querySelector('[data-tabs-target="tab"][data-panel="screenshot"]');
+            if (main) { main.click(); }
+          }
+        }
         // Auto-save on any change. Changing the layout re-renders the available
         // options, so it goes through the enclosing Turbo Frame (swaps this pane
         // in place). Every other change saves via fetch so the field keeps focus
@@ -323,6 +338,7 @@
               if (!r.ok) { throw new Error("save failed"); }
               flashSaved();
               reloadPreview();
+              if (e.target && e.target.getAttribute('data-option-key') === 'year_page_on_button') { syncYearTab(); }
               if (window.tfShowSettingsToast) { window.tfShowSettingsToast(); }
             })
             .catch(function() { setStatus('Save failed'); });
