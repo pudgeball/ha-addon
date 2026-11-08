@@ -54,6 +54,8 @@ class DevicesController < ApplicationController
   end
 
   def preview_frame
+    # Keeps the preview light inside a dark settings page (see layouts/device).
+    @light_only = true
     device = @location.devices.find(params[:id])
     tz = device.location&.time_zone.presence || "America/Denver"
 
