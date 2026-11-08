@@ -1,0 +1,25 @@
+<p class="mb-2 text-sm text-gray-500"><%= pluralize(@api.hourly_forecast.length, "hour") %></p>
+<% if @api.hourly_forecast.present? %>
+  <div class="overflow-x-auto">
+    <table class="tf-table">
+      <thead>
+        <tr>
+          <% @api.hourly_forecast.first.keys.each do |key| %>
+            <th><%= key %></th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody>
+        <% @api.hourly_forecast.each do |hour| %>
+          <tr>
+            <% hour.values.each do |value| %>
+              <td><%= value %></td>
+            <% end %>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="text-gray-500">No hourly forecast data.</p>
+<% end %>

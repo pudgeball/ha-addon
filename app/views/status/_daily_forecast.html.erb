@@ -1,0 +1,25 @@
+<p class="mb-2 text-sm text-gray-500"><%= pluralize(@api.daily_forecast.length, "day") %></p>
+<% if @api.daily_forecast.present? %>
+  <div class="overflow-x-auto">
+    <table class="tf-table">
+      <thead>
+        <tr>
+          <% @api.daily_forecast.first.keys.each do |key| %>
+            <th><%= key %></th>
+          <% end %>
+        </tr>
+      </thead>
+      <tbody>
+        <% @api.daily_forecast.each do |day| %>
+          <tr>
+            <% day.values.each do |value| %>
+              <td><%= value %></td>
+            <% end %>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="text-gray-500">No daily forecast data.</p>
+<% end %>
