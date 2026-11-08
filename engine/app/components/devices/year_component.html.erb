@@ -43,6 +43,7 @@
   #year-view .yv-bar.yv-cont-r { border-top-right-radius: 0; border-bottom-right-radius: 0; }
   #year-view .yv-bar.yv-single { background: #fff; color: #000; border: 3px solid #000; padding: 0; text-align: center; }
   #year-view .yv-label { position: absolute; font-weight: 700; white-space: nowrap; padding: 0 6px; }
+  #year-view .yv-error { position: absolute; left: 6px; bottom: 4px; z-index: 5; font-size: 16px; font-weight: 700; background: #fff; padding: 0 4px; }
   #year-view .yv-more { position: absolute; right: 2px; bottom: 2px; z-index: 4; font-size: 17px; font-weight: 700;
                         background: #fff; padding: 0 4px; border: 2px solid #000; border-radius: 4px; }
   /* In today's column the event bars are redrawn inverted and clipped to the column,
@@ -123,8 +124,17 @@
         rows.push({ y: y, m: m, n: n, days: days, bars: bars, label: label });
       }
 
-      // Phase 2: each month's events.
-      rows.forEach(function (r) { layoutMonth(r); });
+      // Phase 2: each month's events. A month that fails to lay out must not
+      // blank the months after it, so each is drawn on its own and a failure is
+      // written on that month's row.
+      rows.forEach(function (r) {
+        try {
+          layoutMonth(r);
+        } catch (err) {
+          if (window.console) console.error("Year view: " + MONTHS[r.m] + " " + r.y, err);
+          r.days.append(el("div", "yv-error", "Couldn't draw this month: " + (err && err.message)));
+        }
+      });
     }
 
     function layoutMonth(r) {
