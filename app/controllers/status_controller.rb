@@ -3,6 +3,14 @@
 class StatusController < ApplicationController
   layout "application"
 
+  # Detail sections loaded on demand by the Status page (see #section).
+  SECTIONS = {
+    "year_calendars" => "Year View Calendars",
+    "calendar_events" => "Calendar Events",
+    "hourly_forecast" => "Hourly Forecast",
+    "daily_forecast" => "Daily Forecast"
+  }.freeze
+
   def index
     @state = UptimeCheck.current_state
     @uptime_windows = UptimeCheck::WINDOWS.map { |label, duration| [label, UptimeCheck.uptime_percentage(duration)] }
@@ -17,5 +25,12 @@ class StatusController < ApplicationController
         last_fetched_at: @api.send(check[:last_fetched_at])&.iso8601
       }
     end
+  end
+
+  def section
+    return head :not_found unless SECTIONS.key?(params[:section])
+
+    @api = HomeAssistantApi.new
+    render partial: "status/#{params[:section]}"
   end
 end

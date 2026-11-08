@@ -140,125 +140,27 @@
   <% end %>
 </div>
 
-<div class="tf-card mb-4">
-  <h3 class="tf-card-title">Year View Calendars (<%= @api.year_calendar_events.length %> events)</h3>
-  <p class="mb-2 text-sm text-gray-500">
-    Next 12 months, last fetched <%= @api.year_calendars_last_fetched_at&.strftime("%b %-d @ %-l:%M %p") || "never" %>.
-  </p>
-  <% if @api.year_calendar_events.present? %>
-    <div class="overflow-x-auto">
-      <table class="tf-table">
-        <thead>
-          <tr>
-            <th>Calendar</th>
-            <th>Events</th>
-            <th>Shown on Year view</th>
-            <th>Latest event starts</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% @api.year_calendar_summary.each do |row| %>
-            <tr>
-              <td><%= row[:entity_id] %></td>
-              <td><%= row[:events] %></td>
-              <td><%= row[:year_view_events] %></td>
-              <td><%= row[:last_starts_at].strftime("%b %-d, %Y") %></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  <% end %>
-</div>
-
-<div class="tf-card mb-4">
-  <h3 class="tf-card-title">Calendar Events (<%= @api.calendar_events.length %>)</h3>
-  <% if @api.calendar_events.present? %>
-    <div class="overflow-x-auto">
-      <table class="tf-table">
-        <thead>
-          <tr>
-            <th>Icon</th>
-            <th>Daily?</th>
-            <th>Summary</th>
-            <th>Starts At</th>
-            <th>Ends At</th>
-            <th>ID</th>
-            <th>Location</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% @api.calendar_events.sort_by(&:start_i).each do |event| %>
-            <tr>
-              <td><%= event.icon %></td>
-              <td><%= event.daily? %></td>
-              <td><%= event.summary %></td>
-              <td><%= event.starts_at.strftime("%b %-d @ %-l:%M %p") %></td>
-              <td><%= event.ends_at.strftime("%b %-d @ %-l:%M %p") %></td>
-              <td><%= event.id %></td>
-              <td><%= event.location %></td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  <% else %>
-    <p class="text-gray-500">No calendar events.</p>
-  <% end %>
-</div>
-
-<div class="tf-card mb-4">
-  <h3 class="tf-card-title">Hourly Forecast (<%= @api.hourly_forecast.length %>)</h3>
-  <% if @api.hourly_forecast.present? %>
-    <div class="overflow-x-auto">
-      <table class="tf-table">
-        <thead>
-          <tr>
-            <% @api.hourly_forecast.first.keys.each do |key| %>
-              <th><%= key %></th>
-            <% end %>
-          </tr>
-        </thead>
-        <tbody>
-          <% @api.hourly_forecast.each do |hour| %>
-            <tr>
-              <% hour.values.each do |value| %>
-                <td><%= value %></td>
-              <% end %>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  <% else %>
-    <p class="text-gray-500">No hourly forecast data.</p>
-  <% end %>
-</div>
-
-<div class="tf-card mb-4">
-  <h3 class="tf-card-title">Daily Forecast (<%= @api.daily_forecast.length %>)</h3>
-  <% if @api.daily_forecast.present? %>
-    <div class="overflow-x-auto">
-      <table class="tf-table">
-        <thead>
-          <tr>
-            <% @api.daily_forecast.first.keys.each do |key| %>
-              <th><%= key %></th>
-            <% end %>
-          </tr>
-        </thead>
-        <tbody>
-          <% @api.daily_forecast.each do |day| %>
-            <tr>
-              <% day.values.each do |value| %>
-                <td><%= value %></td>
-              <% end %>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
-  <% else %>
-    <p class="text-gray-500">No daily forecast data.</p>
-  <% end %>
-</div>
+<%# The detail sections list every calendar event and forecast row, which is
+    most of what made this page slow, so each one loads when it's opened. %>
+<% StatusController::SECTIONS.each do |section, title| %>
+  <details class="tf-card mb-4" data-status-section="<%= status_section_path(section) %>">
+    <summary class="tf-card-title cursor-pointer"><%= title %></summary>
+    <div class="mt-2" data-status-section-body><p class="text-sm text-gray-500">Loading&hellip;</p></div>
+  </details>
+<% end %>
+<script>
+  document.querySelectorAll("details[data-status-section]").forEach(function (section) {
+    section.addEventListener("toggle", function () {
+      if (!section.open || section.dataset.loaded) return;
+      section.dataset.loaded = "true";
+      var body = section.querySelector("[data-status-section-body]");
+      fetch(section.dataset.statusSection, { headers: { Accept: "text/html" }, credentials: "same-origin" })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+        .then(function (html) { body.innerHTML = html; })
+        .catch(function () {
+          delete section.dataset.loaded;
+          body.innerHTML = '<p class="text-sm text-gray-500">Couldn\'t load this section. Close and reopen to try again.</p>';
+        });
+    });
+  });
+</script>

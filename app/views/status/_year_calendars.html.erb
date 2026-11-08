@@ -1,0 +1,27 @@
+<p class="mb-2 text-sm text-gray-500">
+  <%= pluralize(@api.year_calendar_events.length, "event") %> in the next 12 months, last fetched <%= @api.year_calendars_last_fetched_at&.strftime("%b %-d @ %-l:%M %p") || "never" %>.
+</p>
+<% if @api.year_calendar_events.present? %>
+  <div class="overflow-x-auto">
+    <table class="tf-table">
+      <thead>
+        <tr>
+          <th>Calendar</th>
+          <th>Events</th>
+          <th>Shown on Year view</th>
+          <th>Latest event starts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @api.year_calendar_summary.each do |row| %>
+          <tr>
+            <td><%= row[:entity_id] %></td>
+            <td><%= row[:events] %></td>
+            <td><%= row[:year_view_events] %></td>
+            <td><%= row[:last_starts_at].strftime("%b %-d, %Y") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
