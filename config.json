@@ -1,6 +1,6 @@
 {
   "name": "Timeframe Test",
-  "version": "2.15.1-test.5",
+  "version": "2.15.1-test.6",
   "slug": "timeframe",
   "description": "An e-paper calendar, weather, and smart home family dashboard",
   "url": "https://github.com/pudgeball/ha-addon",
@@ -11,7 +11,7 @@
   "homeassistant_api": true,
   "hassio_role": "default",
   "ingress": true,
-  "ingress_port": 8099,
+  "ingress_port": 8098,
   "panel_icon": "mdi:calendar-clock",
   "panel_title": "Timeframe",
   "host_network": true,
@@ -19,10 +19,10 @@
     "data:rw"
   ],
   "ports": {
-    "8099/tcp": 8099
+    "8098/tcp": 8098
   },
   "ports_description": {
-    "8099/tcp": "Web interface"
+    "8098/tcp": "Web interface"
   },
   "options": {},
   "schema": {}
