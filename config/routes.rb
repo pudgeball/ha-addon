@@ -6,6 +6,7 @@ Rails.application.routes.draw do
   root to: "dashboard#index"
   get "pair", to: "setup#index"
   get "status", to: "status#index"
+  get "status/sections/:section", to: "status#section", as: :status_section
   get "settings", to: "settings#show"
   patch "settings", to: "settings#update"
   get "events", to: "events#index"
