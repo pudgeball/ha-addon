@@ -49,7 +49,8 @@ class ScreenshotServiceTest < Minitest::Test
     ScreenshotService.capture("http://example.test/d/1?page=1", raw: true)
     sleep 0.2
 
-    assert_equal 2, browser.pages.size, "both captures should use the same browser"
+    assert_equal 1, browser.pages.size, "both captures should use the same browser tab"
+    assert_equal "http://example.test/d/1?page=1", browser.pages.first.visited
     assert_equal 0, browser.quit_count, "the second capture should cancel the first one's idle quit"
 
     sleep 0.3

@@ -80,6 +80,7 @@ class ScreenshotService
     end
 
     def reset!
+      @page = nil
       @browser&.quit
       @browser = nil
     end
@@ -90,12 +91,14 @@ class ScreenshotService
       if raw
         png_base64
       elsif grayscale_only
+        # One ImageMagick pass: to grey first (a third of the data to rotate),
+        # then 16 even grey levels via -depth 4. The panels show 16 fixed
+        # levels, so this skips the adaptive -colors 16 quantization, which was
+        # most of the 2-3s this step took on a Home Assistant box.
         image = MiniMagick::Image.read(Base64.decode64(png_base64), ".png")
-        image.rotate "90" if rotate
         image.combine_options do |c|
           c.colorspace "Gray"
-          c.dither("None")
-          c.colors 16
+          c.rotate "90" if rotate
           c.depth 4
         end
         image.format "png"
@@ -169,7 +172,10 @@ class ScreenshotService
       timings = (@timings ||= {})
       step_started_at = monotonic_now
       timings[:browser] = @browser ? "reused" : "launched"
-      page = browser.create_page
+      # While the browser is kept open, keep its tab too: opening a new one
+      # took ~0.6s on a Home Assistant box.
+      keep_page = keep_browser_for.to_f > 0
+      page = keep_page ? (@page ||= browser.create_page) : browser.create_page
       timings[:launch_ms] = elapsed_ms(step_started_at)
       begin
         page.command("Emulation.setDeviceMetricsOverride",
@@ -185,7 +191,7 @@ class ScreenshotService
         timings[:screenshot_ms] = elapsed_ms(step_started_at)
       ensure
         begin
-          page&.close
+          page&.close unless keep_page
         rescue Ferrum::Error
           # Page or browser already gone; nothing to clean up.
         end

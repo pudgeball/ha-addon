@@ -34,6 +34,19 @@ class TokenDevicesControllerTest < ActionDispatch::IntegrationTest
     assert_nil @device.reload.last_connection_at
   end
 
+  test "screenshot generation serves the page already rendered for the change check, once" do
+    Rails.stub(:cache, ActiveSupport::Cache::MemoryStore.new) do
+      url = @device.with_prerendered_html("http://example.test/d/#{@device.id}?generation=true", "<html><body>prerendered page</body></html>")
+      token = url[/prerendered=(\h+)/, 1]
+
+      get "/d/#{@device.id}?key=#{@device.display_key}&generation=true&prerendered=#{token}"
+      assert_response :success
+      assert_equal "<html><body>prerendered page</body></html>", response.body
+
+      assert_nil @device.take_prerendered_html(token), "a token is good for one page load"
+    end
+  end
+
   test "show with valid id and wrong key returns 401" do
     get "/d/#{@device.id}?key=wrongkey"
     assert_response :unauthorized
