@@ -1,6 +1,6 @@
 {
   "name": "Timeframe Test",
-  "version": "2.15.1-test.8",
+  "version": "2.15.1-test.9",
   "slug": "timeframe",
   "description": "An e-paper calendar, weather, and smart home family dashboard",
   "url": "https://github.com/pudgeball/ha-addon",
@@ -13,7 +13,7 @@
   "ingress": true,
   "ingress_port": 8098,
   "panel_icon": "mdi:calendar-clock",
-  "panel_title": "Timeframe",
+  "panel_title": "Timeframe Test",
   "host_network": true,
   "map": [
     "data:rw"
