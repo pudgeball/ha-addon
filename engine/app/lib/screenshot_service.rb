@@ -101,7 +101,8 @@ class ScreenshotService
           c.rotate "90" if rotate
           c.depth 4
         end
-        image.format "png"
+        # No image.format "png": the capture is already a PNG, and format runs
+        # a second full ImageMagick pass that writes the same bytes.
         Base64.strict_encode64(image.to_blob)
       else
         process_image(Base64.decode64(png_base64), grayscale_depth: grayscale_depth, rotate: rotate, dither: dither)

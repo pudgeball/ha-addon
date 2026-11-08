@@ -751,10 +751,15 @@ class HomeAssistantApi
 
   def save_domain(domain, data)
     @store.write(storage_key(domain), {last_fetched_at: Time.now.utc, response: data}.to_json)
+    @domain_values&.delete(domain)
   end
 
+  # Each domain is read and parsed once per instance: building one display
+  # asks for the states 100+ times (every sensor, label and weather row), and
+  # re-parsing the JSON each time was most of the build. Instances are
+  # short-lived (one per display build or fetch), and a save drops the copy.
   def domain_value(domain)
-    JSON.parse(@store.read(storage_key(domain)) || "{}", symbolize_names: true)
+    (@domain_values ||= {})[domain] ||= JSON.parse(@store.read(storage_key(domain)) || "{}", symbolize_names: true)
   end
 
   def domain_data(domain)
