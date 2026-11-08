@@ -246,6 +246,43 @@ class DeviceTest < Minitest::Test
     assert_match(/device=#{device.id} page=main result=skipped duration_ms=\d+ render_ms=\d+\n/, lines[1])
   end
 
+  def test_refresh_screenshot_hands_the_rendered_page_to_the_browser_once
+    device = Device.create!(location: test_location, name: "test_prerender_#{SecureRandom.hex(3)}", model: "trmnl_og", mac_address: "CE:#{SecureRandom.hex(5).scan(/../).join(":").upcase}", api_key: SecureRandom.hex(16), friendly_id: SecureRandom.alphanumeric(6).upcase, display_key: SecureRandom.alphanumeric(24))
+    urls = []
+    device.stub(:page_store, ActiveSupport::Cache::MemoryStore.new) do
+      device.stub(:rendered_display_html, "<html>stable</html>") do
+        device.stub(:capture_screenshot, ->(url) { urls << url and "img" }) do
+          device.refresh_screenshot!("http://example.test")
+        end
+      end
+
+      token = urls.first[/[?&]prerendered=(\h+)\z/, 1]
+      assert token, urls.first
+      assert_equal "<html>stable</html>", device.take_prerendered_html(token)
+      assert_nil device.take_prerendered_html(token), "a token is good for one page load"
+      assert_nil device.take_prerendered_html("../#{token}")
+      assert_nil device.take_prerendered_html(nil)
+    end
+  end
+
+  def test_with_prerendered_html_falls_back_to_the_plain_url
+    device = Device.new(id: 4343, name: "test_prerender_fallback", model: "trmnl_og")
+    assert_equal "http://example.test/d/1", device.with_prerendered_html("http://example.test/d/1", nil)
+
+    broken_store = Object.new
+    def broken_store.write(*, **) = raise("disk full")
+    device.stub(:page_store, broken_store) do
+      assert_equal "http://example.test/d/1", device.with_prerendered_html("http://example.test/d/1", "<html></html>")
+    end
+  end
+
+  def test_rendered_display_html_shows_the_charge_reminder_like_the_display_page
+    device = Device.create!(location: test_location, name: "test_reminder_html_#{SecureRandom.hex(3)}", model: "trmnl_og", mac_address: "CF:#{SecureRandom.hex(5).scan(/../).join(":").upcase}", api_key: SecureRandom.hex(16), friendly_id: SecureRandom.alphanumeric(6).upcase)
+    device.stub(:device_content, ->(**) { {battery: {level: 5, low: true, charging: false}} }) do
+      assert_includes device.rendered_display_html, "charge-reminder"
+    end
+  end
+
   def test_screenshot_base_url_prefers_the_configured_host
     device = Device.new(name: "test_host", model: "trmnl_x")
     original = Device.screenshot_host
