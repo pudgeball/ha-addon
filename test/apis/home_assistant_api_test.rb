@@ -809,6 +809,35 @@ class HomeAssistantApiTest < Minitest::Test
     end
   end
 
+  def test_fetch_year_calendars_covers_this_month_and_the_next_eleven
+    api = new_test_api
+    requested = nil
+    trip = {
+      "uid" => "trip-1",
+      "summary" => "Japan",
+      "start" => {"date" => "2026-11-12"},
+      "end" => {"date" => "2026-11-22"}
+    }
+    get = ->(url, **) {
+      requested = url
+      [trip]
+    }
+
+    api.stub :fetch_calendar_list, [{"entity_id" => "calendar.family"}] do
+      api.stub :fetch_calendar_icons, {} do
+        HTTParty.stub :get, get do
+          api.fetch_year_calendars(now: Time.utc(2026, 11, 7, 18, 0, 0))
+        end
+      end
+    end
+
+    # Midnight Nov 1 to midnight Nov 1 a year later, in Home Assistant's zone (Chicago).
+    assert_includes requested, "start=2026-11-01T05:00:00Z"
+    assert_includes requested, "end=2027-11-01T05:00:00Z"
+    assert_equal ["Japan"], api.year_calendar_events.map(&:summary)
+    assert_empty api.calendar_events
+  end
+
   def test_fetch_calendars_builds_stable_id_when_uid_is_missing
     api = new_test_api
     calendar = {"entity_id" => "calendar.family"}
