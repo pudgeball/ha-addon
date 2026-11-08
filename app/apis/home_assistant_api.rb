@@ -300,6 +300,23 @@ class HomeAssistantApi
     @year_calendar_events ||= build_calendar_events(domain_value(YEAR_CALENDAR_DOMAIN)[:response] || [])
   end
 
+  def year_calendars_last_fetched_at
+    domain_last_fetched_at(YEAR_CALENDAR_DOMAIN)
+  end
+
+  # Per-calendar counts for the Status page, to see how far ahead Home
+  # Assistant returned events and how many qualify for the Year template.
+  def year_calendar_summary
+    year_calendar_events.group_by(&:entity_id).map do |entity_id, events|
+      {
+        entity_id: entity_id,
+        events: events.length,
+        year_view_events: events.count(&:year_view?),
+        last_starts_at: events.map(&:starts_at).max
+      }
+    end.sort_by { |row| row[:entity_id].to_s }
+  end
+
   def build_calendar_events(raw_events)
     raw_events.map do |raw|
       event = raw.symbolize_keys.slice(:id, :starts_at, :ends_at, :summary, :description, :location, :icon, :entity_id)
