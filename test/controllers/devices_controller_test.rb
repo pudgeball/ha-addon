@@ -596,6 +596,19 @@ class DevicesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
   end
 
+  test "only the preview_frame asks browsers not to darken the display page" do
+    thirteen = Device.find_or_create_by!(name: "test-thirteen", model: "visionect_13") { |d| d.location = @location }
+    thirteen.update!(demo_mode_enabled: true, confirmed_at: Time.current, confirmation_code: nil, display_key: SecureRandom.alphanumeric(24))
+
+    get "/accounts/#{@account.id}/locations/#{@location.id}/devices/#{thirteen.id}/preview_frame"
+    assert_response :success
+    assert_includes response.body, %(<meta name="color-scheme" content="light only">)
+
+    get "/d/#{thirteen.id}?key=#{thirteen.display_key}"
+    assert_response :success
+    refute_includes response.body, "color-scheme"
+  end
+
   private
 
   def year_screenshot_device(enabled:)
