@@ -11,8 +11,8 @@
   #year-view .yv-dayhead { display: grid; grid-template-columns: 92px 1fr; height: 30px; border-bottom: 2px solid #000; }
   #year-view .yv-nums { display: grid; grid-template-columns: repeat(31, 1fr); }
   #year-view .yv-nums > div { position: relative; text-align: center; font-size: 19px; font-weight: 700; line-height: 28px; }
-  /* Today's date is inverted by a white "difference" layer. */
-  #year-view .yv-loupe { position: absolute; inset: 0; background: #fff; mix-blend-mode: difference; border-radius: 6px 6px 0 0; }
+  /* Today's date is drawn inverted, as a tab sitting on top of today's column. */
+  #year-view .yv-nums > div.yv-today-num { background: #000; color: #fff; border-radius: 6px 6px 0 0; }
 
   #year-view .yv-grid { flex: 1; display: grid; grid-template-rows: repeat(12, 1fr); min-height: 0; }
   #year-view .yv-month { display: grid; grid-template-columns: 92px 1fr; border-bottom: 2px solid #bbb; min-height: 0; }
@@ -96,9 +96,7 @@
       var dayhead = el("div", "yv-dayhead"), nums = el("div", "yv-nums");
       dayhead.append(el("div"));
       for (var d = 1; d <= 31; d++) {
-        var num = el("div", null, d);
-        if (d === today.getDate()) num.append(el("div", "yv-loupe"));
-        nums.append(num);
+        nums.append(el("div", d === today.getDate() ? "yv-today-num" : null, d));
       }
       dayhead.append(nums);
       root.append(dayhead);
