@@ -1,3 +1,16 @@
+## [2.20.0] - 2026-11-08
+
+### Changed
+- Regenerating a screenshot is much faster (about 2s instead of 6-10s on a Home Assistant box): the screenshot browser stays open for two minutes between captures instead of starting and quitting each time, the display page is built once per capture instead of twice, and the TRMNL X / reTerminal E1003 greyscale conversion does less work
+- The settings preview, Status page and device settings open faster: Home Assistant data is read once per page instead of 100+ times, the device settings page no longer asks Home Assistant for every calendar's icon on each load, and the Status page's calendar and forecast tables load when you open them
+- Less background work: the realtime display check is skipped when there are no Mira displays, the calendar import reuses the calendar list the calendar fetch just loaded, and event icon suggestions are looked up once per title, when an event is opened
+- The add-on log is shorter (info level, no line per database query) and now shows how long each screenshot and background task takes
+
+### Fixed
+- Home screen cards no longer crop TRMNL X and reTerminal E1003 screenshots to a square
+- A low-battery charge reminder now counts as a change, so the screenshot updates when it appears
+- The settings preview asks browsers that darken pages on their own (such as Safari's Adaptive Dark Mode) to keep it light
+
 ## [2.19.1] - 2026-11-08
 
 ### Fixed
