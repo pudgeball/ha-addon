@@ -16,6 +16,13 @@ class TokenDevicesController < ApplicationController
       return
     end
 
+    # The screenshot browser loading a page Device#refresh_screenshot! already
+    # rendered for its change check: serve that instead of building it again.
+    if params[:generation] == "true" && (html = @device.take_prerendered_html(params[:prerendered]))
+      render html: html.html_safe, layout: false
+      return
+    end
+
     @device.update_column(:last_connection_at, Time.current) unless params[:at].present? || params[:generation] == "true"
 
     template = @device.template_for_page(params[:page])

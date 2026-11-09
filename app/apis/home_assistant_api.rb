@@ -27,6 +27,9 @@ class HomeAssistantApi
   # short-range fetch stays small.
   YEAR_CALENDAR_DOMAIN = "home_assistant_year_calendar_api"
   WEATHER_DOMAIN = "home_assistant_weather_api"
+  # The calendar list (with icons), saved whenever calendars are fetched.
+  CALENDAR_ENTITIES_DOMAIN = "home_assistant_calendar_entities_api"
+  CALENDAR_ENTITIES_MAX_AGE = 10.minutes
 
   def initialize(config = TimeframeConfig.new, store: Rails.cache, wind_gust_threshold_mph: 20.0, account: nil)
     @config = config
@@ -255,6 +258,7 @@ class HomeAssistantApi
     out = []
     calendars = fetch_calendar_list
     icons = fetch_calendar_icons(calendars)
+    save_calendar_entities(calendars, icons)
 
     calendars.each do |calendar|
       entity_id = calendar["entity_id"]
@@ -341,13 +345,26 @@ class HomeAssistantApi
     end
   end
 
+  # The Home Assistant calendars with their names and icons. Listing them asks
+  # Home Assistant once for the list and once per calendar for its icon, so the
+  # list saved by the regular calendar fetch (every minute) is used while it's
+  # recent, and the settings page and calendar import don't repeat those calls.
   def calendar_entities
+    fetched = domain_last_fetched_at(CALENDAR_ENTITIES_DOMAIN)
+    return domain_data(CALENDAR_ENTITIES_DOMAIN) if fetched && fetched > DateTime.now - CALENDAR_ENTITIES_MAX_AGE
+
     calendars = fetch_calendar_list
-    icons = fetch_calendar_icons(calendars)
-    calendars.map do |c|
+    save_calendar_entities(calendars, fetch_calendar_icons(calendars))
+  end
+
+  def save_calendar_entities(calendars, icons)
+    entities = calendars.map do |c|
       entity_id = c["entity_id"]
       {entity_id: entity_id, name: c["name"].presence || entity_id, icon: icons[entity_id] || "calendar"}
     end
+    # An empty list is usually a failed request, so it isn't kept.
+    save_domain(CALENDAR_ENTITIES_DOMAIN, entities) if entities.any?
+    entities
   end
 
   def fetch_calendar_list
@@ -751,10 +768,15 @@ class HomeAssistantApi
 
   def save_domain(domain, data)
     @store.write(storage_key(domain), {last_fetched_at: Time.now.utc, response: data}.to_json)
+    @domain_values&.delete(domain)
   end
 
+  # Each domain is read and parsed once per instance: building one display
+  # asks for the states 100+ times (every sensor, label and weather row), and
+  # re-parsing the JSON each time was most of the build. Instances are
+  # short-lived (one per display build or fetch), and a save drops the copy.
   def domain_value(domain)
-    JSON.parse(@store.read(storage_key(domain)) || "{}", symbolize_names: true)
+    (@domain_values ||= {})[domain] ||= JSON.parse(@store.read(storage_key(domain)) || "{}", symbolize_names: true)
   end
 
   def domain_data(domain)

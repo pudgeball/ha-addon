@@ -1,0 +1,33 @@
+<p class="mb-2 text-sm text-gray-500"><%= pluralize(@api.calendar_events.length, "event") %></p>
+<% if @api.calendar_events.present? %>
+  <div class="overflow-x-auto">
+    <table class="tf-table">
+      <thead>
+        <tr>
+          <th>Icon</th>
+          <th>Daily?</th>
+          <th>Summary</th>
+          <th>Starts At</th>
+          <th>Ends At</th>
+          <th>ID</th>
+          <th>Location</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @api.calendar_events.sort_by(&:start_i).each do |event| %>
+          <tr>
+            <td><%= event.icon %></td>
+            <td><%= event.daily? %></td>
+            <td><%= event.summary %></td>
+            <td><%= event.starts_at.strftime("%b %-d @ %-l:%M %p") %></td>
+            <td><%= event.ends_at.strftime("%b %-d @ %-l:%M %p") %></td>
+            <td><%= event.id %></td>
+            <td><%= event.location %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+<% else %>
+  <p class="text-gray-500">No calendar events.</p>
+<% end %>

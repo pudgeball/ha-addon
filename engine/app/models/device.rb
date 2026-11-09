@@ -779,15 +779,18 @@ class Device < ActiveRecord::Base
     # re-flash the panel for unchanged content. A new deploy changes DEPLOY_TIME
     # so every device refreshes exactly once after a release. A forced refresh
     # (the Regenerate button) always recaptures, so a bad capture can't stick.
-    crc = display_content_crc
+    html, crc = display_html_and_crc
+    render_ms = elapsed_milliseconds(started_at)
     if !force && crc && crc == display_state_crc && cached_image.present?
-      log_screenshot_refresh("skipped", crc: crc, duration_ms: elapsed_milliseconds(started_at))
+      log_screenshot_refresh("skipped", crc: crc, duration_ms: elapsed_milliseconds(started_at), render_ms: render_ms)
       return
     end
 
     previous_crc = display_state_crc
     stage = "capture"
-    self.cached_image = capture_screenshot(url)
+    capture_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    self.cached_image = capture_screenshot(with_prerendered_html(url, html))
+    capture_ms = elapsed_milliseconds(capture_started_at)
     stage = "persist"
     self.cached_image_at = Time.current
     self.last_generated_at = cached_image_at
@@ -796,7 +799,8 @@ class Device < ActiveRecord::Base
 
     stage = "encode"
     encode_visionect_image! if visionect?
-    log_screenshot_refresh("regenerated", crc: crc, previous_crc: previous_crc, duration_ms: elapsed_milliseconds(started_at))
+    log_screenshot_refresh("regenerated", crc: crc, previous_crc: previous_crc, duration_ms: elapsed_milliseconds(started_at),
+      render_ms: render_ms, capture_ms: capture_ms, forced: force)
   rescue => e
     log_screenshot_refresh("failed", duration_ms: elapsed_milliseconds(started_at), stage: stage, error: e)
     raise
@@ -805,21 +809,34 @@ class Device < ActiveRecord::Base
   # Captures the Year page, skipping the capture when its rendered HTML hasn't
   # changed since the last one (same short-circuit as refresh_screenshot!).
   def refresh_year_page_screenshot!(base_url = nil, force: false)
+    started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     base_url = screenshot_base_url(base_url)
-    crc = display_content_crc(template: YEAR_TEMPLATE)
+    html, crc = display_html_and_crc(template: YEAR_TEMPLATE)
+    render_ms = elapsed_milliseconds(started_at)
     cached = year_page_cache
-    return if !force && crc && cached[:crc] == crc && cached[:image].present?
+    if !force && crc && cached[:crc] == crc && cached[:image].present?
+      log_screenshot_timing("skipped", page: "year", duration_ms: elapsed_milliseconds(started_at), render_ms: render_ms)
+      return
+    end
 
     url = token_device_url(host: base_url, generation: true, page: YEAR_PAGE)
-    image = capture_screenshot(url, template: YEAR_TEMPLATE)
+    capture_started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    image = capture_screenshot(with_prerendered_html(url, html), template: YEAR_TEMPLATE)
+    capture_ms = elapsed_milliseconds(capture_started_at)
     page_store.write(page_cache_key("year_image"), {image: image, at: Time.current, crc: crc})
+    log_screenshot_timing("regenerated", page: "year", duration_ms: elapsed_milliseconds(started_at),
+      render_ms: render_ms, capture_ms: capture_ms, forced: force)
+  rescue => e
+    log_screenshot_timing("failed", page: "year", duration_ms: elapsed_milliseconds(started_at), error: e)
+    raise
   end
 
   # Records the screenshot refresh decision (skipped vs regenerated) as an audit
   # log so the content-hash short-circuit is observable in the admin audit view.
   # CreateAuditLogJob/AuditLog only exist in the cloud app, so this is a no-op
   # in deployments without them.
-  def log_screenshot_refresh(result, crc: nil, previous_crc: nil, duration_ms: nil, stage: nil, error: nil)
+  def log_screenshot_refresh(result, crc: nil, previous_crc: nil, duration_ms: nil, stage: nil, error: nil, render_ms: nil, capture_ms: nil, forced: nil)
+    log_screenshot_timing(result, page: "main", duration_ms: duration_ms, render_ms: render_ms, capture_ms: capture_ms, forced: forced, stage: stage, error: error)
     return unless defined?(CreateAuditLogJob)
 
     metadata = {content_crc: crc, previous_content_crc: previous_crc, duration_ms: duration_ms, stage: stage}.compact
@@ -835,17 +852,57 @@ class Device < ActiveRecord::Base
     Rails.logger.warn("[Screenshot] audit log failed for #{name}: #{e.message}")
   end
 
+  # One log line per screenshot refresh, so the app log shows what each capture
+  # cost: render_ms is rendering the page to check whether it changed,
+  # capture_ms is the headless browser screenshot (only when it did change).
+  def log_screenshot_timing(result, page:, duration_ms:, render_ms: nil, capture_ms: nil, forced: nil, stage: nil, error: nil)
+    fields = {device: id, page: page, result: result, duration_ms: duration_ms,
+              render_ms: render_ms, capture_ms: capture_ms, forced: (forced || nil), stage: stage}.compact
+    line = "[Screenshot] " + fields.map { |key, value| "#{key}=#{value}" }.join(" ")
+    line += " error=#{error.class}: #{error.message}" if error
+    error ? Rails.logger.warn(line) : Rails.logger.info(line)
+  end
+
   def elapsed_milliseconds(started_at)
     ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at) * 1000).round
   end
 
   # CRC of the rendered display HTML combined with the deploy id. Returns nil if
   # rendering fails so the caller falls back to capturing a fresh screenshot.
-  def display_content_crc(template: active_template)
-    Zlib.crc32("#{rendered_display_html(template: template)}\n#{DEPLOY_TIME}")
+  # The display page's HTML and its CRC (with the deploy id). Both are nil if
+  # rendering fails, so the caller captures a fresh screenshot from the page.
+  def display_html_and_crc(template: active_template)
+    html = rendered_display_html(template: template)
+    [html, Zlib.crc32("#{html}\n#{DEPLOY_TIME}")]
   rescue => e
     Rails.logger.warn("[Screenshot] content hash failed for #{name}: #{e.message}")
-    nil
+    [nil, nil]
+  end
+
+  # Building the display page is most of the work of rendering it, so the HTML
+  # rendered for the change check is handed to the screenshot browser rather
+  # than built a second time: it's stored briefly under a one-time token that
+  # TokenDevicesController#show serves (and deletes) when the browser asks.
+  PRERENDERED_HTML_TTL = 2.minutes
+
+  def with_prerendered_html(url, html)
+    return url if html.blank?
+
+    token = SecureRandom.hex(12)
+    page_store.write(page_cache_key("prerendered/#{token}"), html, expires_in: PRERENDERED_HTML_TTL)
+    "#{url}&prerendered=#{token}"
+  rescue => e
+    Rails.logger.warn("[Screenshot] couldn't store the prerendered page for #{name}: #{e.message}")
+    url
+  end
+
+  def take_prerendered_html(token)
+    return if token.blank? || !token.to_s.match?(/\A\h+\z/)
+
+    key = page_cache_key("prerendered/#{token}")
+    html = page_store.read(key)
+    page_store.delete(key) if html
+    html
   end
 
   # Renders the device display page HTML in-process (no headless browser),
@@ -854,6 +911,12 @@ class Device < ActiveRecord::Base
   def rendered_display_html(current_time: nil, template: active_template)
     view_object = device_content(current_time: current_time, template: template)
     view_object[:configuration] = configuration || {}
+    # Same as TokenDevicesController#show: a low battery replaces the page with
+    # the charge reminder, so the change check sees it and the capture shows it.
+    if Device.charge_reminder?(view_object)
+      return ApplicationController.render(Devices::ChargeReminderComponent.new(view_object: view_object), layout: "device")
+    end
+
     component = DevicesController::TEMPLATE_COMPONENTS[template].constantize.new(view_object: view_object)
     ApplicationController.render(
       component,

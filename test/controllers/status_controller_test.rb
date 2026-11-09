@@ -22,13 +22,38 @@ class StatusControllerTest < ActionDispatch::IntegrationTest
     ])
 
     Rails.stub(:cache, store) do
-      get "/status"
+      get "/status/sections/year_calendars"
     end
 
     assert_response :success
-    assert_includes response.body, "Year View Calendars (1 events)"
+    assert_includes response.body, "1 event in the next 12 months"
     assert_includes response.body, "calendar.family"
     assert_includes response.body, "Jun 1, 2027"
+  end
+
+  test "status page loads its long detail sections on demand" do
+    get "/status"
+
+    assert_response :success
+    StatusController::SECTIONS.each do |section, title|
+      assert_includes response.body, %(data-status-section="/status/sections/#{section}")
+      assert_includes response.body, title
+    end
+    refute_includes response.body, "No calendar events."
+  end
+
+  test "each status detail section renders on its own" do
+    {"calendar_events" => /\d+ events?</, "hourly_forecast" => /\d+ hours?</, "daily_forecast" => /\d+ days?</}.each do |section, count_line|
+      get "/status/sections/#{section}"
+      assert_response :success
+      assert_match count_line, response.body
+      refute_includes response.body, "<html", "a section is a fragment, not a page"
+    end
+  end
+
+  test "unknown status sections are not found" do
+    get "/status/sections/nope"
+    assert_response :not_found
   end
 
   test "status page shows the uptime section" do

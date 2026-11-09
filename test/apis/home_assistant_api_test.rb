@@ -14,6 +14,24 @@ class HomeAssistantApiTest < Minitest::Test
     assert_equal "application/json", headers[:"content-type"]
   end
 
+  def test_each_domain_is_read_once_per_instance_until_it_is_saved_again
+    store = ActiveSupport::Cache::MemoryStore.new
+    reads = 0
+    counting_store = store.dup
+    counting_store.define_singleton_method(:read) { |*args, **opts| reads += 1 and store.read(*args, **opts) }
+    counting_store.define_singleton_method(:write) { |*args, **opts| store.write(*args, **opts) }
+    api = HomeAssistantApi.new(TimeframeConfig.new, store: counting_store)
+
+    api.save_states([{entity_id: "sensor.a", state: "1"}])
+    3.times { api.data }
+    assert_equal 1, reads
+    assert_equal "1", api.data.first[:state]
+
+    api.save_states([{entity_id: "sensor.a", state: "2"}])
+    assert_equal "2", api.data.first[:state], "saving a domain drops the parsed copy"
+    assert_equal 2, reads
+  end
+
   def test_home_assistant_base_url_without_config
     api = HomeAssistantApi.new(TimeframeConfig.new)
     assert_equal "http://homeassistant.local:8123", api.home_assistant_base_url
@@ -837,6 +855,8 @@ class HomeAssistantApiTest < Minitest::Test
     assert_equal ["Japan"], api.year_calendar_events.map(&:summary)
     assert_empty api.calendar_events
     assert api.year_calendars_last_fetched_at.present?
+    assert_equal [{entity_id: "calendar.family", name: "calendar.family", icon: "calendar"}], api.calendar_entities,
+      "a calendar fetch saves the calendar list for calendar_entities"
   end
 
   def test_year_calendar_summary_counts_events_per_calendar
@@ -1009,6 +1029,35 @@ class HomeAssistantApiTest < Minitest::Test
         assert_equal({entity_id: "calendar.work", name: "calendar.work", icon: "calendar"}, entities.last)
       end
     end
+  end
+
+  def test_calendar_entities_uses_the_saved_list_while_it_is_recent
+    api = new_test_api
+    api.save_calendar_entities([{"entity_id" => "calendar.family", "name" => "Family"}], {"calendar.family" => "home"})
+    no_requests = -> { raise "should not ask Home Assistant" }
+
+    api.stub :fetch_calendar_list, no_requests do
+      assert_equal [{entity_id: "calendar.family", name: "Family", icon: "home"}], api.calendar_entities
+    end
+
+    travel 11.minutes do
+      fresh = HomeAssistantApi.new(TimeframeConfig.new, store: api.instance_variable_get(:@store))
+      fresh.stub :fetch_calendar_list, [{"entity_id" => "calendar.work"}] do
+        fresh.stub :fetch_calendar_icons, {} do
+          assert_equal ["calendar.work"], fresh.calendar_entities.map { |c| c[:entity_id] }, "a stale list is fetched again"
+        end
+      end
+    end
+  end
+
+  def test_an_empty_calendar_list_is_not_saved
+    api = new_test_api
+    api.stub :fetch_calendar_list, [] do
+      api.stub :fetch_calendar_icons, {} do
+        assert_empty api.calendar_entities
+      end
+    end
+    assert_nil api.send(:domain_last_fetched_at, HomeAssistantApi::CALENDAR_ENTITIES_DOMAIN)
   end
 
   def test_fetch_calendar_icons
