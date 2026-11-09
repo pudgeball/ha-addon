@@ -411,8 +411,15 @@ class Device < ActiveRecord::Base
         0
       elsif special_function.to_s.casecmp?("rewind")
         0
+      elsif Device.user_wake?(update_source)
+        YEAR_PAGE - current_page
+      elsif update_source.to_s.casecmp?("timer")
+        # A scheduled wake refreshes whichever page is showing, so the Year
+        # page stays up until a press (or a left tap) goes back.
+        current_page
       elsif !update_source.nil?
-        Device.user_wake?(update_source) ? YEAR_PAGE - current_page : 0
+        # A reboot, setup or other wake starts again on the main page.
+        0
       else
         legacy_page_for_poll(previous_connection_at, now)
       end
@@ -444,7 +451,7 @@ class Device < ActiveRecord::Base
     elsif elapsed < refresh_rate(at: previous_connection_at) * BUTTON_PRESS_WINDOW
       YEAR_PAGE - current_page
     else
-      0
+      current_page
     end
   end
 

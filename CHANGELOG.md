@@ -2,6 +2,7 @@
 
 ### Changed
 - Pressing a TRMNL button (or picking Next Screen from the TRMNL X touchbar menu) now checks for changes before answering, so a calendar event added since the last quarter-hour update shows up straight away. When nothing has changed the device keeps its current image and doesn't redraw
+- The Year page stays up when the device wakes on its own schedule: it refreshes in place instead of going back to the week, until you press again to go back
 
 ## [2.20.1] - 2026-11-08
 
