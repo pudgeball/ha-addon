@@ -276,7 +276,7 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
 
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           get "/api/display", headers: headers.merge("Update-Source" => "timer")
-          assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
+          assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
         end
       end
     end
@@ -358,7 +358,7 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
     assert_equal "oldimage", device.cached_image
   end
 
-  test "display returns to the main page on a scheduled poll" do
+  test "display keeps the year page on a scheduled poll" do
     device = create_year_page_device!
     store = ActiveSupport::Cache::MemoryStore.new
     store.write(device.page_cache_key("current"), 1)
@@ -366,15 +366,17 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
     travel_to ActiveSupport::TimeZone["America/Chicago"].local(2026, 7, 17, 12, 0, 0) do
       device.update!(last_connection_at: 15.minutes.ago)
       Rails.stub(:cache, store) do
-        get "/api/display", headers: {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key}
+        ScreenshotService.stub :capture, "yearimage" do
+          get "/api/display", headers: {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key, "Update-Source" => "timer"}
+        end
       end
     end
 
     assert_response :success
     json = JSON.parse(response.body)
-    assert_equal device.reload.page_filename(0), json["filename"]
-    refute_includes json["image_url"], "page="
-    assert_equal 0, store.read(device.page_cache_key("current"))
+    assert_match(/\Ayear-/, json["filename"])
+    assert json["image_url"].end_with?("?page=1")
+    assert_equal 1, store.read(device.page_cache_key("current"))
   end
 
   test "display succeeds when poll metrics cannot be recorded" do

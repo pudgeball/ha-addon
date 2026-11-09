@@ -539,7 +539,9 @@ class DeviceTest < Minitest::Test
       # Pressing again flips back to the main page.
       assert_equal 0, device.select_page_for_poll!(now - 1.minute, now: now)
       device.select_page_for_poll!(now - 1.minute, now: now)
-      # The scheduled refresh returns to the main page.
+      # The scheduled refresh keeps whichever page is showing.
+      assert_equal 1, device.select_page_for_poll!(now - 15.minutes, now: now)
+      assert_equal 0, device.select_page_for_poll!(now - 1.minute, now: now)
       assert_equal 0, device.select_page_for_poll!(now - 15.minutes, now: now)
     end
   end
@@ -554,9 +556,13 @@ class DeviceTest < Minitest::Test
       # A left tap goes back to the main page.
       assert_equal 0, device.select_page_for_poll!(nil, update_source: "EXT0", special_function: "rewind")
       device.select_page_for_poll!(nil, update_source: "EXT0")
-      # A scheduled refresh, a reboot or setup shows the main page, even if
-      # it arrives early.
+      # A scheduled refresh keeps whichever page is showing, even if it
+      # arrives early.
+      assert_equal 1, device.select_page_for_poll!(1.minute.ago, update_source: "timer")
+      assert_equal 1, device.select_page_for_poll!(1.minute.ago, update_source: "TIMER")
+      device.select_page_for_poll!(nil, update_source: "EXT0")
       assert_equal 0, device.select_page_for_poll!(1.minute.ago, update_source: "timer")
+      # A reboot, setup or any other wake starts again on the main page.
       device.select_page_for_poll!(nil, update_source: "EXT0")
       assert_equal 0, device.select_page_for_poll!(1.minute.ago, update_source: "unknown")
       device.select_page_for_poll!(nil, update_source: "EXT0")
