@@ -106,8 +106,12 @@ module Api
       # on devices that have it turned on (see Device#select_page_for_poll!).
       page = @device.select_page_for_poll!(previous_connection_at, update_source: update_source, special_function: special_function)
       page = show_year_page_or_fall_back if page == Device::YEAR_PAGE
-      if page != Device::YEAR_PAGE && (@device.cached_image.blank? || params[:force].present?)
-        @device.refresh_screenshot!(request.base_url)
+      if page != Device::YEAR_PAGE
+        if @device.cached_image.blank? || params[:force].present?
+          @device.refresh_screenshot!(request.base_url)
+        elsif Device.user_wake?(update_source)
+          refresh_main_page_on_press
+        end
       end
       record_device_poll(@device, telemetry, previous_connection_at:)
       # Reconnecting clears any pending "offline for a day" alert so a future
@@ -182,6 +186,18 @@ module Api
     rescue => e
       Rails.logger.error("[API Display] Year page capture failed for device #{@device.id}: #{e.class}: #{e.message}")
       @device.remember_page!(0)
+    end
+
+    # A press asks for what's current now, so recheck the main page rather than
+    # serving the last scheduled capture: a calendar change since then shows up
+    # straight away. The change check keeps this to a quick render when nothing
+    # changed (same image, same filename, no redraw). If the capture fails, the
+    # device gets the image it already has.
+    def refresh_main_page_on_press
+      @device.refresh_screenshot!(request.base_url)
+    rescue => e
+      Rails.logger.error("[API Display] Main page recheck on press failed for device #{@device.id}: #{e.class}: #{e.message}")
+      @device.reload
     end
 
     def update_device_from_headers(device)

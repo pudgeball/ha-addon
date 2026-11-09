@@ -381,6 +381,12 @@ class Device < ActiveRecord::Base
   # they keep the current page rather than flipping it back.
   BUTTON_PRESS_DEBOUNCE_SECONDS = 15
 
+  # Whether the firmware's Update-Source header says a person woke the device
+  # (a button press, or Next Screen on the TRMNL X's touchbar menu).
+  def self.user_wake?(update_source)
+    USER_WAKE_SOURCES.include?(update_source.to_s.downcase)
+  end
+
   def year_page_supported?
     YEAR_PAGE_MODELS.include?(model) && active_template != YEAR_TEMPLATE
   end
@@ -406,7 +412,7 @@ class Device < ActiveRecord::Base
       elsif special_function.to_s.casecmp?("rewind")
         0
       elsif !update_source.nil?
-        USER_WAKE_SOURCES.include?(update_source.to_s.downcase) ? YEAR_PAGE - current_page : 0
+        Device.user_wake?(update_source) ? YEAR_PAGE - current_page : 0
       else
         legacy_page_for_poll(previous_connection_at, now)
       end
