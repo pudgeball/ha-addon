@@ -276,7 +276,7 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
 
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           get "/api/display", headers: headers.merge("Update-Source" => "timer")
-          assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
+          assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
         end
       end
     end
@@ -314,7 +314,51 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
     assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
   end
 
-  test "display returns to the main page on a scheduled poll" do
+  test "display rechecks the main page on a press but not on a scheduled wake" do
+    device = create_trmnl_device!
+    device.update!(cached_image: "oldimage", cached_image_at: 1.hour.ago)
+    headers = {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key, "FW-Version" => "1.8.18"}
+    captures = 0
+    capture = ->(*, **) { captures += 1; "newimage" }
+
+    travel_to ActiveSupport::TimeZone["America/Chicago"].local(2026, 7, 17, 12, 0, 0) do
+      ScreenshotService.stub :capture, capture do
+        get "/api/display", headers: headers.merge("Update-Source" => "timer")
+        assert_equal 0, captures
+        old_filename = JSON.parse(response.body)["filename"]
+
+        # The page changed since the last capture (no checksum yet), so the
+        # press recaptures and the device gets a new filename to draw.
+        get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
+        assert_equal 1, captures
+        assert_equal "newimage", device.reload.cached_image
+        pressed_filename = JSON.parse(response.body)["filename"]
+        refute_equal old_filename, pressed_filename
+
+        # Nothing changed since that capture, so a second press keeps the same
+        # image and filename and the device has nothing to redraw.
+        get "/api/display", headers: headers.merge("Update-Source" => "button")
+        assert_equal 1, captures
+        assert_equal pressed_filename, JSON.parse(response.body)["filename"]
+      end
+    end
+  end
+
+  test "display serves the existing image when the press recheck fails" do
+    device = create_trmnl_device!
+    device.update!(cached_image: "oldimage", cached_image_at: 1.hour.ago)
+    failing_capture = ->(*, **) { raise "net::ERR_CONNECTION_REFUSED" }
+
+    ScreenshotService.stub :capture, failing_capture do
+      get "/api/display", headers: {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key, "Update-Source" => "EXT0"}
+    end
+
+    assert_response :success
+    assert_equal device.reload.page_filename(0), JSON.parse(response.body)["filename"]
+    assert_equal "oldimage", device.cached_image
+  end
+
+  test "display keeps the year page on a scheduled poll" do
     device = create_year_page_device!
     store = ActiveSupport::Cache::MemoryStore.new
     store.write(device.page_cache_key("current"), 1)
@@ -322,15 +366,17 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
     travel_to ActiveSupport::TimeZone["America/Chicago"].local(2026, 7, 17, 12, 0, 0) do
       device.update!(last_connection_at: 15.minutes.ago)
       Rails.stub(:cache, store) do
-        get "/api/display", headers: {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key}
+        ScreenshotService.stub :capture, "yearimage" do
+          get "/api/display", headers: {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key, "Update-Source" => "timer"}
+        end
       end
     end
 
     assert_response :success
     json = JSON.parse(response.body)
-    assert_equal device.reload.page_filename(0), json["filename"]
-    refute_includes json["image_url"], "page="
-    assert_equal 0, store.read(device.page_cache_key("current"))
+    assert_match(/\Ayear-/, json["filename"])
+    assert json["image_url"].end_with?("?page=1")
+    assert_equal 1, store.read(device.page_cache_key("current"))
   end
 
   test "display succeeds when poll metrics cannot be recorded" do
