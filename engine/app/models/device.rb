@@ -412,7 +412,10 @@ class Device < ActiveRecord::Base
       elsif special_function.to_s.casecmp?("rewind")
         0
       elsif Device.user_wake?(update_source)
-        YEAR_PAGE - current_page
+        # The firmware retries a request it gave up on (2 s later), and the
+        # retry carries the same wake reason. Treat a press this soon after the
+        # last poll as that retry so it doesn't flip the page straight back.
+        pressed_retry?(previous_connection_at, now) ? current_page : YEAR_PAGE - current_page
       elsif update_source.to_s.casecmp?("timer")
         # A scheduled wake refreshes whichever page is showing, so the Year
         # page stays up until a press (or a left tap) goes back.
@@ -440,6 +443,10 @@ class Device < ActiveRecord::Base
     screen = (page.to_i == YEAR_PAGE) ? "year" : "week"
     at = page_image_at(page) || Time.current
     "#{screen}-#{Digest::SHA256.hexdigest("device-#{id}")[0, 6]}-#{at.to_i}"
+  end
+
+  def pressed_retry?(previous_connection_at, now)
+    previous_connection_at.present? && now - previous_connection_at < BUTTON_PRESS_DEBOUNCE_SECONDS
   end
 
   def legacy_page_for_poll(previous_connection_at, now)
@@ -814,6 +821,7 @@ class Device < ActiveRecord::Base
     encode_visionect_image! if visionect?
     log_screenshot_refresh("regenerated", crc: crc, previous_crc: previous_crc, duration_ms: elapsed_milliseconds(started_at),
       render_ms: render_ms, capture_ms: capture_ms, forced: force)
+    log_html_changes("main", html)
   rescue => e
     log_screenshot_refresh("failed", duration_ms: elapsed_milliseconds(started_at), stage: stage, error: e)
     raise
@@ -839,6 +847,7 @@ class Device < ActiveRecord::Base
     page_store.write(page_cache_key("year_image"), {image: image, at: Time.current, crc: crc})
     log_screenshot_timing("regenerated", page: "year", duration_ms: elapsed_milliseconds(started_at),
       render_ms: render_ms, capture_ms: capture_ms, forced: force)
+    log_html_changes("year", html)
   rescue => e
     log_screenshot_timing("failed", page: "year", duration_ms: elapsed_milliseconds(started_at), error: e)
     raise
@@ -874,6 +883,62 @@ class Device < ActiveRecord::Base
     line = "[Screenshot] " + fields.map { |key, value| "#{key}=#{value}" }.join(" ")
     line += " error=#{error.class}: #{error.message}" if error
     error ? Rails.logger.warn(line) : Rails.logger.info(line)
+  end
+
+  # How much of each recapture's HTML changes to log: the first few lines that
+  # were removed and added, each cut to a readable length.
+  CHANGE_LOG_LINES = 5
+  CHANGE_LOG_LINE_LENGTH = 160
+  CHANGE_LOG_CONTEXT = 40
+
+  # Logs which lines of a page's HTML changed since its last capture, so a
+  # redraw that looks the same on the panel can be traced to what caused it.
+  # The HTML is kept in the cache for the next comparison. Logging never stops
+  # a capture.
+  def log_html_changes(page, html)
+    return if html.blank?
+
+    key = page_cache_key("last_html/#{page}")
+    previous = page_store.read(key)
+    page_store.write(key, html)
+    prefix = "[Screenshot] device=#{id} page=#{page}"
+    if previous.blank?
+      Rails.logger.info("#{prefix} changes=unknown (no earlier capture to compare with)")
+      return
+    end
+
+    before = previous.lines.map(&:strip).reject(&:empty?)
+    after = html.lines.map(&:strip).reject(&:empty?)
+    removed = before - after
+    added = after - before
+    if removed.empty? && added.empty?
+      Rails.logger.info("#{prefix} changes=none (same lines; a new release or reordered lines)")
+      return
+    end
+
+    Rails.logger.info("#{prefix} changes: #{removed.size} lines removed, #{added.size} added")
+    removed.first(CHANGE_LOG_LINES).each_with_index do |line, index|
+      Rails.logger.info("#{prefix}   - #{change_excerpt(line, added[index])}")
+    end
+    added.first(CHANGE_LOG_LINES).each_with_index do |line, index|
+      Rails.logger.info("#{prefix}   + #{change_excerpt(line, removed[index])}")
+    end
+  rescue => e
+    Rails.logger.warn("[Screenshot] couldn't log page changes for #{name}: #{e.message}")
+  end
+
+  # A changed line cut to a readable length. Long lines start a little before
+  # the first character that differs from the line it replaced, so the change
+  # itself is what shows.
+  def change_excerpt(line, other)
+    start = 0
+    if other
+      same = 0
+      same += 1 while same < line.length && same < other.length && line[same] == other[same]
+      start = [same - CHANGE_LOG_CONTEXT, 0].max
+    end
+    excerpt = line[start..].truncate(CHANGE_LOG_LINE_LENGTH)
+    start.positive? ? "…#{excerpt}" : excerpt
   end
 
   def elapsed_milliseconds(started_at)

@@ -271,10 +271,18 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
 
+          # The firmware retrying that request 2 s later keeps the Year page.
+          travel 2.seconds
+          get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
+          assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
+
+          travel 1.minute
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0", "special_function" => "rewind")
           assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
 
+          travel 1.minute
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
+          travel 1.minute
           get "/api/display", headers: headers.merge("Update-Source" => "timer")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
         end

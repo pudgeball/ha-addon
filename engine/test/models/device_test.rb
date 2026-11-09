@@ -240,7 +240,7 @@ class DeviceTest < Minitest::Test
         end
       end
     end
-    lines = log.string.lines.grep(/\[Screenshot\]/)
+    lines = log.string.lines.grep(/\[Screenshot\] .*result=/)
     assert_equal 2, lines.size, log.string
     assert_match(/device=#{device.id} page=main result=regenerated duration_ms=\d+ render_ms=\d+ capture_ms=\d+/, lines[0])
     assert_match(/device=#{device.id} page=main result=skipped duration_ms=\d+ render_ms=\d+\n/, lines[1])
@@ -568,6 +568,61 @@ class DeviceTest < Minitest::Test
       device.select_page_for_poll!(nil, update_source: "EXT0")
       assert_equal 0, device.select_page_for_poll!(1.minute.ago, update_source: "")
     end
+  end
+
+  def test_select_page_treats_a_quick_repeat_press_as_a_retry
+    device = year_page_device
+    now = Time.utc(2026, 11, 9, 18, 40, 52)
+    with_page_store(device) do
+      assert_equal 1, device.select_page_for_poll!(nil, now: now, update_source: "EXT0")
+      # The firmware's retry of a slow response, 2 s after it: keep the page.
+      assert_equal 1, device.select_page_for_poll!(now - 2.seconds, now: now, update_source: "EXT0")
+      # A real press later on flips it.
+      assert_equal 0, device.select_page_for_poll!(now - 20.seconds, now: now, update_source: "EXT0")
+    end
+  end
+
+  def test_log_html_changes_names_the_lines_that_changed
+    device = year_page_device
+    log = StringIO.new
+    long_before = "<div style=\"#{"a" * 200}\">12°</div>"
+    long_after = "<div style=\"#{"a" * 200}\">13°</div>"
+    with_page_store(device) do
+      Rails.stub(:logger, ActiveSupport::Logger.new(log)) do
+        device.log_html_changes("main", "<p>same</p>\n<p>Lunch</p>\n#{long_before}\n")
+        device.log_html_changes("main", "<p>same</p>\n<p>Dinner</p>\n#{long_after}\n<p>New</p>\n")
+        device.log_html_changes("main", "<p>same</p>\n<p>Dinner</p>\n#{long_after}\n<p>New</p>\n")
+        device.log_html_changes("main", "")
+      end
+    end
+
+    lines = log.string.lines.map(&:strip)
+    assert_includes lines, "[Screenshot] device=4242 page=main changes=unknown (no earlier capture to compare with)"
+    assert_includes lines, "[Screenshot] device=4242 page=main changes: 2 lines removed, 3 added"
+    assert_includes lines, "[Screenshot] device=4242 page=main   - <p>Lunch</p>"
+    assert_includes lines, "[Screenshot] device=4242 page=main   + <p>Dinner</p>"
+    assert_includes lines, "[Screenshot] device=4242 page=main   + <p>New</p>"
+    # The long line is shown from just before the difference, not its start.
+    assert(lines.any? { |line| line.include?("- …") && line.end_with?("\">12°</div>") })
+    assert(lines.any? { |line| line.include?("+ …") && line.end_with?("\">13°</div>") })
+    assert_includes lines, "[Screenshot] device=4242 page=main changes=none (same lines; a new release or reordered lines)"
+    # The blank page logs nothing.
+    assert_equal 3, lines.count { |line| line.include?("page=main changes") }
+  end
+
+  def test_log_html_changes_never_stops_a_capture
+    device = year_page_device
+    log = StringIO.new
+    broken_store = Object.new
+    def broken_store.read(*) = raise("cache unavailable")
+
+    device.stub(:page_store, broken_store) do
+      Rails.stub(:logger, ActiveSupport::Logger.new(log)) do
+        device.log_html_changes("year", "<p>x</p>")
+      end
+    end
+
+    assert_includes log.string, "couldn't log page changes for test_year: cache unavailable"
   end
 
   def test_page_filename_follows_the_firmware_format

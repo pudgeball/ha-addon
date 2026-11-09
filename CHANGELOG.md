@@ -1,3 +1,11 @@
+## [2.21.1] - 2026-11-09
+
+### Fixed
+- A TRMNL press no longer flips straight back when the device retries a slow response: a second press within 15 seconds of the last poll counts as that retry and keeps the page it asked for
+
+### Added
+- The add-on log now says what changed on the page each time a new screenshot is taken (the first few lines of HTML removed and added), so a redraw that looks the same on the panel can be traced to its cause
+
 ## [2.21.0] - 2026-11-08
 
 ### Changed
