@@ -1,3 +1,8 @@
+## [2.20.1] - 2026-11-08
+
+### Fixed
+- The Year view on TRMNL X and reTerminal E1003 is easier to read: the hatching over past days, the lines between days, weekend shading and month dividers are darker, so they no longer wash out on the e-paper panel
+
 ## [2.20.0] - 2026-11-08
 
 ### Changed
