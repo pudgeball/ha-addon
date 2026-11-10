@@ -33,14 +33,12 @@ module HaAddon
     # (1 + 2 = 3 threads) so the async pool stays within the DB connection pool.
     config.good_job.queues = ENV.fetch("GOOD_JOB_QUEUES", "screenshots:1;-screenshots:2")
     config.good_job.enable_cron = true
+    # The per-minute uptime heartbeat runs from config/scheduler.rb instead of
+    # here, so it doesn't fill the log with job queue lines.
     config.good_job.cron = {
       refresh_disconnected_screenshots: {
         cron: "0 * * * *",
         class: "RefreshDisconnectedDeviceScreenshotsJob"
-      },
-      record_uptime: {
-        cron: "* * * * *",
-        class: "RecordUptimeJob"
       },
       cleanup_uptime_checks: {
         cron: "0 2 * * *",

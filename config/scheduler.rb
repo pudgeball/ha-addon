@@ -1,9 +1,16 @@
 scheduler = Rufus::Scheduler.new
 
-# Each task logs how long it took (see TaskTimer). The every-2-seconds ones are
-# summed up once a minute instead of logged on every run.
+# Each task logs how long it took (see TaskTimer). The startup tasks run once
+# and log every run; the recurring ones are summed up once an hour, plus a line
+# straight away for any run slower than a second or that fails, so the log
+# isn't mostly "took 95ms" lines.
+TASK_SUMMARY_SECONDS = 3600
 timers = Hash.new do |hash, name|
-  hash[name] = name.start_with?("2s ") ? TaskTimer.new(name, summary_every: 60, slow_ms: 1000) : TaskTimer.new(name)
+  hash[name] = if name.start_with?("startup ")
+    TaskTimer.new(name)
+  else
+    TaskTimer.new(name, summary_every: TASK_SUMMARY_SECONDS, slow_ms: 1000)
+  end
 end
 
 api = HomeAssistantApi.new
@@ -49,6 +56,11 @@ end
 scheduler.every "1m" do
   timers["1m fetch_weather"].run { HomeAssistantApi.new.fetch_weather }
   timers["1m broadcast_mira (weather)"].run { DeviceBroadcaster.broadcast_all_mira_devices }
+end
+
+# The uptime heartbeat: one row per minute, on the minute (see UptimeCheck).
+scheduler.cron "* * * * *" do
+  timers["1m record_uptime"].run { RecordUptimeJob.record! }
 end
 
 scheduler.join

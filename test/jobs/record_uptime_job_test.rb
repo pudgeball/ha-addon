@@ -23,6 +23,19 @@ class RecordUptimeJobTest < ActiveSupport::TestCase
     assert_equal Time.current.utc.beginning_of_minute, UptimeCheck.first.recorded_at
   end
 
+  test "record! writes the heartbeat directly, for the scheduler" do
+    HomeAssistantApi.stub(:new, FakeApi.new(true)) do
+      RecordUptimeJob.record!
+    end
+
+    assert_equal 1, UptimeCheck.count
+    assert UptimeCheck.first.healthy
+  end
+
+  test "the heartbeat is not also queued as a GoodJob cron job" do
+    refute_includes Rails.application.config.good_job.cron.keys, :record_uptime
+  end
+
   test "marks healthy when all HA domain checks pass" do
     HomeAssistantApi.stub(:new, FakeApi.new(true)) do
       RecordUptimeJob.new.perform
