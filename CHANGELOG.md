@@ -1,3 +1,8 @@
+## [2.21.2] - 2026-11-09
+
+### Changed
+- The add-on log is about 90% shorter. Background tasks (fetching calendars, weather and states) now log one summary line per task an hour instead of a line every minute, plus a line straight away for any run slower than a second or that fails. The once-a-minute uptime heartbeat no longer goes through the job queue, which logged four lines for it every minute. Screenshot, device and error lines are unchanged
+
 ## [2.21.1] - 2026-11-09
 
 ### Fixed
