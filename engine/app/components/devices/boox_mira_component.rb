@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Devices::BooxMiraComponent < ViewComponent::Base
+  include Devices::TemperatureDisplay
+
   # :nocov:
   def initialize(view_object:, refresh: false, device: nil, device_url: nil)
     @view_object = view_object

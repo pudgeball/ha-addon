@@ -61,7 +61,7 @@
               <% end %>
               <td>
                 <div>
-                  <%= event[:summary] %><% if event[:precip] %><% event[:precip].each do |p| %> / <% if p[:icon] %><i class="mdi mdi-<%= p[:icon] %>"></i> <% end %><%= p[:label] %><% end %><% end %><% if event[:wind_gust] %> / <i class="mdi mdi-weather-windy"></i> <%= event[:wind_gust] %><% end %>
+                  <%= event_summary(event) %><% if event[:precip] %><% event[:precip].each do |p| %> / <% if p[:icon] %><i class="mdi mdi-<%= p[:icon] %>"></i> <% end %><%= p[:label] %><% end %><% end %><% if event[:wind_gust] %> / <i class="mdi mdi-weather-windy"></i> <%= event[:wind_gust] %><% end %>
                   <div style="font-size: .5rem;"><%= event[:location] %></div>
                 </div>
               </td>
@@ -91,7 +91,7 @@
               <span class="timeline-time-inner"><%= event[:time_html].html_safe %></span>
             </td>
             <td style="<%= "text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 0;" if truncate_text %>">
-              <%= event[:summary] %>
+              <%= event_summary(event) %>
             </td>
           </tr>
         <% end %>

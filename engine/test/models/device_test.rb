@@ -11,6 +11,15 @@ class DeviceTest < Minitest::Test
     Device.where("name LIKE 'test_%' OR name LIKE 'Visionect %' OR name LIKE 'Living Room %'").destroy_all
   end
 
+  def test_temperature_unit_follows_the_account
+    device = Device.new
+    assert_equal "F", device.temperature_unit
+
+    device.stub(:account, Account.new(temperature_unit: "C")) do
+      assert_equal "C", device.temperature_unit
+    end
+  end
+
   def test_model_name_label
     device = Device.new(name: "test", model: "visionect_13")
     assert_equal "Visionect Place & Play 13\"", device.model_name_label

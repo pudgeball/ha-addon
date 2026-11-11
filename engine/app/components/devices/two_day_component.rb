@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Devices::TwoDayComponent < ViewComponent::Base
+  include Devices::TemperatureDisplay
+
   include ActionView::Helpers::TextHelper
 
   def initialize(view_object:, landscape: false)

@@ -10,6 +10,8 @@ class DemoDeviceContent
 
     out = {}
     out[:current_temperature] = "72°"
+    # The demo forecast is written in Fahrenheit whatever the account uses.
+    out[:temperature_unit] = "F"
     out[:current_time] = current_time
 
     battery = Device.battery_descriptor(level: battery_level, charging: charging)

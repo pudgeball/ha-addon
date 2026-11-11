@@ -38,7 +38,7 @@
       <% if daily_weather %>
         <div class="sticky-day-weather">
           <i class="mdi mdi-<%= daily_weather[:icon_class] %>"></i>
-          <span><%= daily_weather[:summary] %></span>
+          <span><%= temperature(daily_weather[:summary]) %></span>
         </div>
       <% end %>
     </header>
@@ -64,7 +64,7 @@
                   <% end %>
                 </td>
               <% end %>
-              <td class="sticky-day-event-summary"><%= event[:summary] %></td>
+              <td class="sticky-day-event-summary"><%= event_summary(event) %></td>
             </tr>
           <% end %>
         </table>
