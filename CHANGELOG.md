@@ -1,3 +1,8 @@
+## [2.21.3] - 2026-11-11
+
+### Fixed
+- Event titles keep accented and non-English letters: "Pokémon" no longer shows as "Pokmon", and titles in Japanese, Russian, Greek and other scripts are no longer deleted. Emoji and invisible characters are still removed. Screenshotted devices don't have Japanese, Chinese or Korean fonts yet, so those titles show as boxes there
+
 ## [2.21.2] - 2026-11-09
 
 ### Changed

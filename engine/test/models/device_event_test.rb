@@ -279,6 +279,30 @@ class DeviceEventTest < Minitest::Test
     assert_equal("meeting", event.summary)
   end
 
+  def test_keeps_accented_letters
+    event = DeviceEvent.new(starts_at: "2023-11-01", ends_at: "2023-11-08", summary: "Pokémon Center, São Paulo, Zoë, Ñandú")
+
+    assert_equal("Pokémon Center, São Paulo, Zoë, Ñandú", event.summary)
+  end
+
+  def test_keeps_decomposed_accents
+    event = DeviceEvent.new(starts_at: "2023-11-01", ends_at: "2023-11-08", summary: "Poke\u0301mon")
+
+    assert_equal("Poke\u0301mon", event.summary)
+  end
+
+  def test_keeps_non_latin_scripts
+    event = DeviceEvent.new(starts_at: "2023-11-01", ends_at: "2023-11-08", summary: "渋谷スカイ, Москва, Αθήνα")
+
+    assert_equal("渋谷スカイ, Москва, Αθήνα", event.summary)
+  end
+
+  def test_strips_emoji_with_variation_selectors_and_keycaps
+    event = DeviceEvent.new(starts_at: "2023-11-01", ends_at: "2023-11-08", summary: "\u2764\uFE0F foo 1\uFE0F\u20E3 \u{1F44D}\u{1F3FD} bar")
+
+    assert_equal("foo 1 bar", event.summary.squeeze(" "))
+  end
+
   def test_daily_summary_count
     event = DeviceEvent.new(
       starts_at: DateTime.new(2023, 1, 23),
