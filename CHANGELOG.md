@@ -1,3 +1,8 @@
+## [2.22.0] - 2026-11-11
+
+### Added
+- New device option, "Show both °F and °C": each forecast temperature is followed by the same reading in the other unit, smaller and in gray (72° 22°). It covers the current temperature, the daily high and low, and the hourly temperatures on every layout. Off by default; the main unit still comes from Settings
+
 ## [2.21.3] - 2026-11-11
 
 ### Fixed

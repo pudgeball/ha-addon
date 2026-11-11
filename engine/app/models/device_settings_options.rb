@@ -23,6 +23,10 @@ class DeviceSettingsOptions
     "Shows a minute-by-minute chart of rain or snow expected over the next " \
     "hour at the bottom of the display."
 
+  SECONDARY_TEMPERATURE_DESCRIPTION =
+    "Follows each temperature with the same reading in the other unit " \
+    "(°C if you use °F, °F if you use °C), smaller and in gray."
+
   UV_WARNING_DESCRIPTION =
     "Shows the current UV index when it is above 3."
 
@@ -150,6 +154,7 @@ class DeviceSettingsOptions
   end
 
   def weather_options
+    switch("show_secondary_temperature", "Show both °F and °C", default_on: false, description: SECONDARY_TEMPERATURE_DESCRIPTION)
     if !one_day? && !two_day?
       switch("show_temperature_events", "Hourly conditions", default_on: true, description: HOURLY_CONDITIONS_DESCRIPTION)
     end

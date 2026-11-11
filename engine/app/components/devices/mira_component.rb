@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Devices::MiraComponent < ViewComponent::Base
+  include Devices::TemperatureDisplay
+
   def initialize(view_object:, refresh: false, device: nil, device_url: nil)
     @view_object = view_object
     @refresh = refresh

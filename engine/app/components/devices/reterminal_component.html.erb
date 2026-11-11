@@ -6,7 +6,7 @@
       <%= @view_object[:current_time].strftime("%A, %b. %-d") %>
     </div>
     <div style="float: right; text-align: right;">
-      <%= @view_object[:current_temperature] %>
+      <%= temperature(@view_object[:current_temperature]) %>
     </div>
     <div>&nbsp;</div>
   </div>
