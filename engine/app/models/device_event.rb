@@ -2,6 +2,12 @@ class DeviceEvent
   DAY_IN_SECONDS = 86_400
   TIMEFRAME_ICON_PATTERN = /timeframe-icon:(?:mdi-)?([a-z0-9][a-z0-9-]*)/i
   TIMEFRAME_COUNTDOWN_PATTERN = /timeframe-countdown:(\d{1,3})/i
+  # Characters removed from titles: emoji, symbols and invisible formatting
+  # characters (zero-width joiners and the like). Letters, digits and the
+  # combining marks that build accents in any script stay, so "Pokémon" and
+  # "渋谷" survive. Emoji variation selectors are combining marks too, so they
+  # are named first to go with the emoji they follow.
+  SUMMARY_STRIP_PATTERN = /[\uFE00-\uFE0F\u{E0100}-\u{E01EF}]|[^\p{L}\p{Mn}\p{Mc}\p{N}.\-" _°\/\\&:+,?()<>'@#%\u2019]/
 
   attr_reader :id, :starts_at, :ends_at, :multi_day, :location, :icon_rotation, :attachment_image, :precip, :wind_gust, :entity_id, :ical_uid
   attr_accessor :icon
@@ -27,7 +33,7 @@ class DeviceEvent
     id: SecureRandom.hex
   )
     @id, @icon, @icon_rotation, @summary, @description, @location, @daily, @timezone, @attachment_image, @wind_gust, @entity_id =
-      id, icon, icon_rotation, summary.gsub(/[^a-zA-Z0-9.\-"\  _°\/\\&:+,?()<>'@#%\u2019]/, ""), description, location, daily, timezone, attachment_image, wind_gust, entity_id
+      id, icon, icon_rotation, summary.gsub(SUMMARY_STRIP_PATTERN, ""), description, location, daily, timezone, attachment_image, wind_gust, entity_id
     @ical_uid = ical_uid
     @yearly_recurring = yearly_recurring
 
