@@ -67,7 +67,7 @@
                   <% end %>
                 </td>
                 <% end %>
-                <td class="one-day-event-summary"><%= event[:summary] %></td>
+                <td class="one-day-event-summary"><%= event_summary(event) %></td>
               </tr>
             <% end %>
             <% visual_periodic.each do |event| %>
@@ -88,7 +88,7 @@
                   <% end %>
                 </td>
                 <% end %>
-                <td class="one-day-event-summary"><%= event[:summary] %></td>
+                <td class="one-day-event-summary"><%= event_summary(event) %></td>
               </tr>
             <% end %>
           </table>

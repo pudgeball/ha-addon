@@ -604,11 +604,19 @@ class Device < ActiveRecord::Base
   def device_content(timezone: nil, current_time: nil, template: active_template)
     tz = timezone || location&.time_zone || "UTC"
     args = content_args(timezone: tz, current_time: current_time, template: template)
-    if demo_mode_enabled?
+    content = if demo_mode_enabled?
       DemoDeviceContent.new.call(timezone: tz, **args)
     else
       DeviceContent.new.call(device: self, timezone: tz, **args)
     end
+    content[:temperature_unit] ||= temperature_unit
+    content
+  end
+
+  # The unit the account shows temperatures in ("F" or "C"); the components
+  # use it to work out the other unit when show_secondary_temperature is on.
+  def temperature_unit
+    (account&.temperature_unit == "C") ? "C" : "F"
   end
 
   # The DeviceContent/DemoDeviceContent arguments derived from this device's

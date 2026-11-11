@@ -41,7 +41,7 @@
               <span class="three-day-weather-item">
                 <span class="three-day-weather-time"><%= w[:start_time] %></span>
                 <i class="mdi mdi-<%= w[:icon_class] %>"></i>
-                <span class="three-day-weather-temp"><%= w[:summary] %></span>
+                <span class="three-day-weather-temp"><%= temperature(w[:summary]) %></span>
               </span>
             <% end %>
           </div>
@@ -72,7 +72,7 @@
                     <% end %>
                   </td>
                   <% end %>
-                  <td class="three-day-event-summary"><%= truncate(event[:summary], length: 30) %></td>
+                  <td class="three-day-event-summary"><%= event[:weather] ? event_summary(event) : truncate(event[:summary], length: 30) %></td>
                 </tr>
               <% end %>
               <% visual_periodic.each do |event| %>
@@ -93,7 +93,7 @@
                     <% end %>
                   </td>
                   <% end %>
-                  <td class="three-day-event-summary"><%= truncate(event[:summary], length: 30) %></td>
+                  <td class="three-day-event-summary"><%= event[:weather] ? event_summary(event) : truncate(event[:summary], length: 30) %></td>
                 </tr>
               <% end %>
             </table>
