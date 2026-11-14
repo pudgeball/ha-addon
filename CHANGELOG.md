@@ -1,3 +1,10 @@
+## [2.22.2] - 2026-11-14
+
+### Fixed
+- Tapping back (left) on a TRMNL X touch bar works. The add-on never saw back taps, and its reply didn't tell the firmware to show anything, so the arrow stayed up and the screen didn't change. With two pages, back now switches to the other page, like next
+- The first tap after an add-on update no longer waits several seconds for a new screenshot. Both pages are now recaptured for every device when the add-on starts, even if its next scheduled capture is already queued
+- A tap the device sends again because a slow answer took too long no longer flips the page back. Any answer of 3 seconds or more now counts as slow, down from 10, which matches the TRMNL X on firmware 1.8.19
+
 ## [2.22.1] - 2026-11-14
 
 ### Fixed
