@@ -380,6 +380,14 @@ class Device < ActiveRecord::Base
   # Without Update-Source: polls this close together are one wake (a retry), so
   # they keep the current page rather than flipping it back.
   BUTTON_PRESS_DEBOUNCE_SECONDS = 15
+  # The firmware gives up on /api/display after 15 s (60 s on the TRMNL X's
+  # 5 GHz modem) and sends it again 2 s later, with the same wake reason. Only
+  # an answer at least this slow can have been given up on, so only then is a
+  # quick repeat press that retry.
+  SLOW_POLL_SECONDS = 10
+  # A poll that never finished (still running, or it failed) can be retried
+  # until the modem's timeout and the retry delay have passed.
+  UNFINISHED_POLL_RETRY_SECONDS = 75
 
   # Whether the firmware's Update-Source header says a person woke the device
   # (a button press, or Next Screen on the TRMNL X's touchbar menu).
@@ -406,16 +414,18 @@ class Device < ActiveRecord::Base
   # Picks the page this /api/display poll should show and remembers it.
   # update_source and special_function are the firmware's request headers.
   def select_page_for_poll!(previous_connection_at, now: Time.current, update_source: nil, special_function: nil)
+    previous_poll_started_at = page_store.read(page_cache_key("poll_started_at"))
+    page_store.write(page_cache_key("poll_started_at"), now)
     page =
       if !year_page_enabled?
         0
       elsif special_function.to_s.casecmp?("rewind")
         0
       elsif Device.user_wake?(update_source)
-        # The firmware retries a request it gave up on (2 s later), and the
-        # retry carries the same wake reason. Treat a press this soon after the
-        # last poll as that retry so it doesn't flip the page straight back.
-        pressed_retry?(previous_connection_at, now) ? current_page : YEAR_PAGE - current_page
+        # Firmware 1.8.19+ stays awake for 20 s after a tap and asks again on
+        # every tap, so presses seconds apart are real. Only the firmware's
+        # retry of an answer it gave up on keeps the page (see pressed_retry?).
+        pressed_retry?(previous_connection_at, previous_poll_started_at, now) ? current_page : YEAR_PAGE - current_page
       elsif update_source.to_s.casecmp?("timer")
         # A scheduled wake refreshes whichever page is showing, so the Year
         # page stays up until a press (or a left tap) goes back.
@@ -445,8 +455,18 @@ class Device < ActiveRecord::Base
     "#{screen}-#{Digest::SHA256.hexdigest("device-#{id}")[0, 6]}-#{at.to_i}"
   end
 
-  def pressed_retry?(previous_connection_at, now)
-    previous_connection_at.present? && now - previous_connection_at < BUTTON_PRESS_DEBOUNCE_SECONDS
+  # Whether this press is the firmware sending the last poll again because it
+  # gave up waiting: the last poll is still running (or failed), or it was
+  # answered too slowly for the device to wait and this one came soon after.
+  def pressed_retry?(previous_connection_at, previous_poll_started_at, now)
+    return false if previous_connection_at.nil? || previous_poll_started_at.nil?
+
+    if previous_connection_at < previous_poll_started_at
+      now - previous_poll_started_at < UNFINISHED_POLL_RETRY_SECONDS
+    else
+      previous_connection_at - previous_poll_started_at >= SLOW_POLL_SECONDS &&
+        now - previous_connection_at < BUTTON_PRESS_DEBOUNCE_SECONDS
+    end
   end
 
   def legacy_page_for_poll(previous_connection_at, now)

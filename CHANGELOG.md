@@ -1,3 +1,8 @@
+## [2.22.1] - 2026-11-14
+
+### Fixed
+- Quick touch bar taps on a TRMNL X with firmware 1.8.19 flip between the week and the Year page again. That firmware stays awake after a tap and asks again on every tap, and taps seconds apart were mistaken for the device retrying, so the page stayed put. A repeat press now only counts as a retry when the last answer was slow enough (10 seconds or more) for the device to have given up on it
+
 ## [2.22.0] - 2026-11-11
 
 ### Added
