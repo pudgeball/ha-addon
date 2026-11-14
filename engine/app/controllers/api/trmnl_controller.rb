@@ -63,7 +63,9 @@ module Api
     def display
       mac_address = request.headers["ID"]
       update_source = request.headers["Update-Source"]
-      special_function = request.headers["special_function"]
+      # The firmware names this header special_function. Puma files it under
+      # HTTP_SPECIAL_FUNCTION, which is how Rails looks up Special-Function.
+      special_function = request.headers["Special-Function"]
       Rails.logger.info("[API Display] mac=#{mac_address} device_id=#{@device&.id} update_source=#{update_source.inspect} special_function=#{special_function.inspect} fw=#{request.headers["FW-Version"].inspect}")
 
       unless @device
@@ -122,7 +124,7 @@ module Api
       # image it fetches already shows that quarter hour's content.
       RefreshDeviceScreenshotJob.set(wait: (@device.refresh_rate - Device::WAKE_DELAY_SECONDS + 5).seconds).perform_later(@device.id)
 
-      render json: {
+      response_json = {
         status: 0,
         filename: @device.page_filename(page),
         image_url: @device.signed_screenshot_url(host: request.base_url, page: page),
@@ -134,6 +136,11 @@ module Api
         firmware_url: nil,
         temperature_profile: "default"
       }
+      # A left tap only shows the answer when it names an action: "guest_mode"
+      # shows this image (from the device's cache when it has it). Without one,
+      # the firmware logs "rewind failed" and leaves its arrow on the screen.
+      response_json[:action] = "guest_mode" if special_function.to_s.casecmp?("rewind")
+      render json: response_json
     end
 
     # POST /api/log

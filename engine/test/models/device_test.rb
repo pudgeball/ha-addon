@@ -562,9 +562,10 @@ class DeviceTest < Minitest::Test
       assert_equal 1, device.select_page_for_poll!(nil, update_source: "EXT0")
       assert_equal 0, device.select_page_for_poll!(nil, update_source: "button")
       assert_equal 1, device.select_page_for_poll!(nil, update_source: "ext0")
-      # A left tap goes back to the main page.
+      # A left tap asks for the previous page, which with two pages is the
+      # other one.
       assert_equal 0, device.select_page_for_poll!(nil, update_source: "EXT0", special_function: "rewind")
-      device.select_page_for_poll!(nil, update_source: "EXT0")
+      assert_equal 1, device.select_page_for_poll!(nil, update_source: "EXT0", special_function: "REWIND")
       # A scheduled refresh keeps whichever page is showing, even if it
       # arrives early.
       assert_equal 1, device.select_page_for_poll!(1.minute.ago, update_source: "timer")
@@ -584,12 +585,25 @@ class DeviceTest < Minitest::Test
     start = Time.utc(2026, 11, 9, 18, 40, 0)
     with_page_store(device) do
       assert_equal 1, device.select_page_for_poll!(nil, now: start, update_source: "EXT0")
-      # That answer took 16 s, past the firmware's 15 s timeout, so it asked
-      # again 2 s later: keep the page.
-      answered = start + 16.seconds
-      assert_equal 1, device.select_page_for_poll!(answered, now: answered + 2.seconds, update_source: "EXT0")
-      # A real press later on flips it.
-      assert_equal 0, device.select_page_for_poll!(answered + 2.seconds, now: answered + 40.seconds, update_source: "EXT0")
+      # That answer took 5.7 s and the device gave up on it, asking again
+      # 1.6 s after it was sent (seen on a TRMNL X on 1.8.19): keep the page.
+      answered = start + 5.7.seconds
+      assert_equal 1, device.select_page_for_poll!(answered, now: answered + 1.6.seconds, update_source: "EXT0")
+      # The retry was answered quickly, so a tap 2 s later is real and flips.
+      retried = answered + 1.9.seconds
+      assert_equal 0, device.select_page_for_poll!(retried, now: retried + 2.seconds, update_source: "EXT0")
+    end
+  end
+
+  def test_select_page_flips_on_a_tap_well_after_a_slow_answer
+    device = year_page_device
+    start = Time.utc(2026, 11, 9, 18, 40, 0)
+    with_page_store(device) do
+      assert_equal 1, device.select_page_for_poll!(nil, now: start, update_source: "EXT0")
+      # A slow answer the device waited for: it downloaded and drew the image,
+      # then someone tapped 4 s later.
+      answered = start + 5.seconds
+      assert_equal 0, device.select_page_for_poll!(answered, now: answered + 4.seconds, update_source: "EXT0")
     end
   end
 
@@ -598,7 +612,7 @@ class DeviceTest < Minitest::Test
     start = Time.utc(2026, 11, 9, 18, 40, 0)
     with_page_store(device) do
       assert_equal 1, device.select_page_for_poll!(start - 5.minutes, now: start, update_source: "EXT0")
-      # The device gave up at 15 s and asked again while that poll was still
+      # The device gave up and asked again while that poll was still
       # capturing (it hasn't recorded its answer yet): keep the page.
       assert_equal 1, device.select_page_for_poll!(start - 5.minutes, now: start + 17.seconds, update_source: "EXT0")
     end
