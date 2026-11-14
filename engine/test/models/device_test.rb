@@ -579,15 +579,43 @@ class DeviceTest < Minitest::Test
     end
   end
 
-  def test_select_page_treats_a_quick_repeat_press_as_a_retry
+  def test_select_page_treats_a_repeat_press_after_a_slow_answer_as_a_retry
     device = year_page_device
-    now = Time.utc(2026, 11, 9, 18, 40, 52)
+    start = Time.utc(2026, 11, 9, 18, 40, 0)
     with_page_store(device) do
-      assert_equal 1, device.select_page_for_poll!(nil, now: now, update_source: "EXT0")
-      # The firmware's retry of a slow response, 2 s after it: keep the page.
-      assert_equal 1, device.select_page_for_poll!(now - 2.seconds, now: now, update_source: "EXT0")
+      assert_equal 1, device.select_page_for_poll!(nil, now: start, update_source: "EXT0")
+      # That answer took 16 s, past the firmware's 15 s timeout, so it asked
+      # again 2 s later: keep the page.
+      answered = start + 16.seconds
+      assert_equal 1, device.select_page_for_poll!(answered, now: answered + 2.seconds, update_source: "EXT0")
       # A real press later on flips it.
-      assert_equal 0, device.select_page_for_poll!(now - 20.seconds, now: now, update_source: "EXT0")
+      assert_equal 0, device.select_page_for_poll!(answered + 2.seconds, now: answered + 40.seconds, update_source: "EXT0")
+    end
+  end
+
+  def test_select_page_treats_a_press_during_an_unfinished_poll_as_a_retry
+    device = year_page_device
+    start = Time.utc(2026, 11, 9, 18, 40, 0)
+    with_page_store(device) do
+      assert_equal 1, device.select_page_for_poll!(start - 5.minutes, now: start, update_source: "EXT0")
+      # The device gave up at 15 s and asked again while that poll was still
+      # capturing (it hasn't recorded its answer yet): keep the page.
+      assert_equal 1, device.select_page_for_poll!(start - 5.minutes, now: start + 17.seconds, update_source: "EXT0")
+    end
+  end
+
+  def test_select_page_flips_on_every_quick_tap_after_a_fast_answer
+    device = year_page_device
+    now = Time.utc(2026, 11, 14, 18, 45, 53)
+    with_page_store(device) do
+      # Firmware 1.8.19 stays awake after a tap and asks on every tap. Answers
+      # take a fraction of a second, so taps a few seconds apart all flip.
+      pages = [0, 4, 8, 12].map do |offset|
+        at = now + offset.seconds
+        page = device.select_page_for_poll!(at - 4.seconds + 0.3, now: at, update_source: "EXT0")
+        page
+      end
+      assert_equal [1, 0, 1, 0], pages
     end
   end
 

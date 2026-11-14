@@ -267,12 +267,29 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
 
     travel_to ActiveSupport::TimeZone["America/Chicago"].local(2026, 7, 17, 12, 0, 0) do
       Rails.stub(:cache, store) do
+        # The first Year page capture takes 16 s, past the firmware's 15 s timeout.
+        slow_capture = ->(*, **) {
+          travel 16.seconds
+          "yearimage"
+        }
+        ScreenshotService.stub :capture, slow_capture do
+          get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
+          assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
+        end
+
         ScreenshotService.stub :capture, "yearimage" do
+          # The firmware retrying that slow request 2 s later keeps the Year page.
+          travel 2.seconds
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
 
-          # The firmware retrying that request 2 s later keeps the Year page.
-          travel 2.seconds
+          # A tap a few seconds after a quick answer is a real tap (firmware
+          # 1.8.19 stays awake and asks again on each one): back to the week,
+          # then the Year page again.
+          travel 4.seconds
+          get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
+          assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
+          travel 4.seconds
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
 
