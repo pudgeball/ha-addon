@@ -260,16 +260,17 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
     assert_equal "yearimage", store.read(device.page_cache_key("year_image"))[:image]
   end
 
-  test "display flips to the year page on a touch wake and back on a left tap" do
+  test "display flips the page on touch bar taps on either side" do
     device = create_year_page_device!
     store = ActiveSupport::Cache::MemoryStore.new
     headers = {"ID" => device.mac_address, "ACCESS_TOKEN" => device.api_key, "FW-Version" => "1.8.18"}
 
     travel_to ActiveSupport::TimeZone["America/Chicago"].local(2026, 7, 17, 12, 0, 0) do
       Rails.stub(:cache, store) do
-        # The first Year page capture takes 16 s, past the firmware's 15 s timeout.
+        # The first Year page capture takes 6 s, long enough for the device to
+        # give up on it.
         slow_capture = ->(*, **) {
-          travel 16.seconds
+          travel 6.seconds
           "yearimage"
         }
         ScreenshotService.stub :capture, slow_capture do
@@ -278,10 +279,12 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
         end
 
         ScreenshotService.stub :capture, "yearimage" do
-          # The firmware retrying that slow request 2 s later keeps the Year page.
-          travel 2.seconds
+          # The firmware retrying that slow request moments later keeps the
+          # Year page.
+          travel 1.5.seconds
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
+          refute JSON.parse(response.body).key?("action")
 
           # A tap a few seconds after a quick answer is a real tap (firmware
           # 1.8.19 stays awake and asks again on each one): back to the week,
@@ -293,12 +296,19 @@ class Api::TrmnlControllerTest < ActionDispatch::IntegrationTest
           get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
 
+          # A left tap. The firmware sends a header named special_function,
+          # which Puma files as HTTP_SPECIAL_FUNCTION. The answer must name the
+          # guest_mode action or the firmware won't show it.
           travel 1.minute
-          get "/api/display", headers: headers.merge("Update-Source" => "EXT0", "special_function" => "rewind")
-          assert_match(/\Aweek-/, JSON.parse(response.body)["filename"])
+          get "/api/display", headers: headers.merge("Update-Source" => "EXT0", "HTTP_SPECIAL_FUNCTION" => "rewind")
+          json = JSON.parse(response.body)
+          assert_match(/\Aweek-/, json["filename"])
+          assert_equal "guest_mode", json["action"]
+          # Another left tap goes to the other page again.
+          travel 3.seconds
+          get "/api/display", headers: headers.merge("Update-Source" => "EXT0", "HTTP_SPECIAL_FUNCTION" => "rewind")
+          assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])
 
-          travel 1.minute
-          get "/api/display", headers: headers.merge("Update-Source" => "EXT0")
           travel 1.minute
           get "/api/display", headers: headers.merge("Update-Source" => "timer")
           assert_match(/\Ayear-/, JSON.parse(response.body)["filename"])

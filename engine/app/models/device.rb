@@ -356,9 +356,10 @@ class Device < ActiveRecord::Base
   # Firmware 1.8.18+ says why it is asking: every /api/display request carries
   # an Update-Source header naming its wake reason ("timer" for a scheduled
   # refresh, "EXT0"/"button"/... for a press or touch), and a left tap adds
-  # special_function: rewind. A press flips between the main page and the Year
-  # page, a left tap goes back to the main page, and anything else (a scheduled
-  # refresh, a reboot, setup) shows the main page.
+  # special_function: rewind. With two pages, a press or a tap on either side
+  # flips between the main page and the Year page. A scheduled refresh keeps
+  # the page that is showing, and anything else (a reboot, setup) shows the
+  # main page.
   #
   # Older firmware sends no Update-Source, so for those devices a poll arriving
   # well before its scheduled refresh is treated as a press instead.
@@ -380,11 +381,13 @@ class Device < ActiveRecord::Base
   # Without Update-Source: polls this close together are one wake (a retry), so
   # they keep the current page rather than flipping it back.
   BUTTON_PRESS_DEBOUNCE_SECONDS = 15
-  # The firmware gives up on /api/display after 15 s (60 s on the TRMNL X's
-  # 5 GHz modem) and sends it again 2 s later, with the same wake reason. Only
-  # an answer at least this slow can have been given up on, so only then is a
-  # quick repeat press that retry.
-  SLOW_POLL_SECONDS = 10
+  # The firmware sends /api/display again 2 s after giving up on it, with the
+  # same wake reason. A TRMNL X on 1.8.19 has been seen giving up on a 5.7 s
+  # answer, so an answer at least this slow may have been given up on...
+  SLOW_POLL_SECONDS = 3
+  # ...and a press this soon after it is that retry. A real tap comes later:
+  # the device first downloads and draws the new image, then someone taps.
+  RETRY_AFTER_SLOW_POLL_SECONDS = 3
   # A poll that never finished (still running, or it failed) can be retried
   # until the modem's timeout and the retry delay have passed.
   UNFINISHED_POLL_RETRY_SECONDS = 75
@@ -419,12 +422,12 @@ class Device < ActiveRecord::Base
     page =
       if !year_page_enabled?
         0
-      elsif special_function.to_s.casecmp?("rewind")
-        0
-      elsif Device.user_wake?(update_source)
+      elsif Device.user_wake?(update_source) || special_function.to_s.casecmp?("rewind")
         # Firmware 1.8.19+ stays awake for 20 s after a tap and asks again on
         # every tap, so presses seconds apart are real. Only the firmware's
         # retry of an answer it gave up on keeps the page (see pressed_retry?).
+        # A left tap (rewind) asks for the previous page, which with two pages
+        # is the other one.
         pressed_retry?(previous_connection_at, previous_poll_started_at, now) ? current_page : YEAR_PAGE - current_page
       elsif update_source.to_s.casecmp?("timer")
         # A scheduled wake refreshes whichever page is showing, so the Year
@@ -465,7 +468,7 @@ class Device < ActiveRecord::Base
       now - previous_poll_started_at < UNFINISHED_POLL_RETRY_SECONDS
     else
       previous_connection_at - previous_poll_started_at >= SLOW_POLL_SECONDS &&
-        now - previous_connection_at < BUTTON_PRESS_DEBOUNCE_SECONDS
+        now - previous_connection_at < RETRY_AFTER_SLOW_POLL_SECONDS
     end
   end
 
@@ -1088,8 +1091,12 @@ class Device < ActiveRecord::Base
   end
 
   def self.enqueue_screenshot_refresh_jobs!(stagger: false)
-    pending_ids = RefreshDeviceScreenshotJob.pending_device_ids
-    where(model: SCREENSHOTTED_MODELS).where.not(id: pending_ids).find_each.with_index do |device, index|
+    # Every device gets a capture now, even one with its next quarter-hour job
+    # already queued: a restart (an add-on update) changes every page's content
+    # hash, and without this the first button press after it waits on a cold
+    # browser and a fresh capture. The job's before_enqueue still skips a device
+    # whose capture is already due or running.
+    where(model: SCREENSHOTTED_MODELS).find_each.with_index do |device, index|
       if stagger
         RefreshDeviceScreenshotJob.set(wait: (index * 30).seconds).perform_later(device.id)
       else
